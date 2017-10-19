@@ -1,3 +1,14 @@
-package: github.com/treacher/namespace-rolebinding-operator
+package: github.com/lwolf/kube-cleanup-operator
 import:
+- package: k8s.io/apimachinery
+  subpackages:
+  - pkg/apis/meta/v1
+  - pkg/runtime
+  - pkg/watch
 - package: k8s.io/client-go
+  version: ^4.0.0
+  subpackages:
+  - kubernetes
+  - pkg/api/v1
+  - tools/cache
+  - tools/clientcmd

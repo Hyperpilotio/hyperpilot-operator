@@ -1,29 +1,77 @@
 package controller
 
 import (
-	"fmt"
-	"log"
-	"sync"
-	"time"
-
-	"k8s.io/api/core/v1"
-	"k8s.io/api/rbac/v1beta1"
+	"encoding/json"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/pkg/api/v1"
 	"k8s.io/client-go/tools/cache"
+	"log"
+	"reflect"
+	"sync"
+	"time"
 )
 
-// NamespaceController watches the kubernetes api for changes to namespaces and
-// creates a RoleBinding for that particular namespace.
-type HyperpilotController struct {
-	sharedInformer cache.SharedIndexInformer
-	kclient        *kubernetes.Clientset
+// PodController watches the kubernetes api for changes to Pods and
+// delete completed Pods without specific annotation
+type PodController struct {
+	podInformer cache.SharedIndexInformer
+	kclient     *kubernetes.Clientset
 }
 
-// Run starts the process for listening for namespace changes and acting upon those changes.
-func (c *HyperpilotController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
+type CreatedByAnnotation struct {
+	Kind       string
+	ApiVersion string
+	Reference  struct {
+		Kind            string
+		Namespace       string
+		Name            string
+		Uid             string
+		ApiVersion      string
+		ResourceVersion string
+	}
+}
+
+// NewPodController creates a new NewPodController
+func NewPodController(kclient *kubernetes.Clientset, opts map[string]string) *PodController {
+	podWatcher := &PodController{}
+
+	// Create informer for watching Namespaces
+	podInformer := cache.NewSharedIndexInformer(
+		&cache.ListWatch{
+			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+				return kclient.CoreV1().Pods(opts["namespace"]).List(options)
+			},
+			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+				return kclient.CoreV1().Pods(opts["namespace"]).Watch(options)
+			},
+		},
+		&v1.Pod{},
+		time.Second*30,
+		cache.Indexers{},
+	)
+	podInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(cur interface{}) {
+			podWatcher.doTheMagic(cur)
+		},
+		UpdateFunc: func(old, cur interface{}) {
+			if !reflect.DeepEqual(old, cur) {
+				podWatcher.doTheMagic(cur)
+			}
+		},
+	})
+
+	podWatcher.kclient = kclient
+	podWatcher.podInformer = podInformer
+
+	return podWatcher
+}
+
+// Run starts the process for listening for pod changes and acting upon those changes.
+func (c *PodController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
+	log.Printf("Listening for changes...")
 	// When this function completes, mark the go function as done
 	defer wg.Done()
 
@@ -31,72 +79,33 @@ func (c *HyperpilotController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	wg.Add(1)
 
 	// Execute go function
-	go c.sharedInformer.Run(stopCh)
+	go c.podInformer.Run(stopCh)
 
 	// Wait till we receive a stop signal
 	<-stopCh
 }
 
-// NewHyperpilotController creates a new NewHyperpilotController
-func NewHyperpilotController(kclient *kubernetes.Clientset) *HyperpilotController {
-	namespaceWatcher := &HyperpilotController{}
-
-	// Create informer for watching Namespaces
-	namespaceInformer := cache.NewSharedIndexInformer(
-		&cache.ListWatch{
-			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-				return kclient.Core().Namespaces().List(options)
-			},
-			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-				return kclient.Core().Namespaces().Watch(options)
-			},
-		},
-		&v1.Namespace{},
-		3*time.Minute,
-		cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
-	)
-
-	namespaceInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: namespaceWatcher.createRoleBinding,
-	})
-
-	namespaceWatcher.kclient = kclient
-	namespaceWatcher.namespaceInformer = namespaceInformer
-
-	return namespaceWatcher
-}
-
-func (c *HyperpilotController) createRoleBinding(obj interface{}) {
-	namespaceObj := obj.(*v1.Namespace)
-	namespaceName := namespaceObj.Name
-
-	roleBinding := &v1beta1.RoleBinding{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "RoleBinding",
-			APIVersion: "rbac.authorization.k8s.io/v1beta1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("ad-kubernetes-%s", namespaceName),
-			Namespace: namespaceName,
-		},
-		Subjects: []v1beta1.Subject{
-			v1beta1.Subject{
-				Kind: "Group",
-				Name: fmt.Sprintf("ad-kubernetes-%s", namespaceName),
-			},
-		},
-		RoleRef: v1beta1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     "edit",
-		},
+func (c *PodController) doTheMagic(cur interface{}) {
+	podObj := cur.(*v1.Pod)
+	// Skip Pods in Running or Pending state
+	if podObj.Status.Phase != "Succeeded" {
+		return
 	}
+	var createdMeta CreatedByAnnotation
+	json.Unmarshal([]byte(podObj.ObjectMeta.Annotations["kubernetes.io/created-by"]), &createdMeta)
+	if createdMeta.Reference.Kind != "Job" {
+		return
+	}
+	restartCounts := podObj.Status.ContainerStatuses[0].RestartCount
+	if restartCounts == 0 {
+		log.Printf("Going to delete pod '%s'", podObj.Name)
+		// Delete Pod
+		var po metav1.DeleteOptions
+		c.kclient.CoreV1().Pods(podObj.Namespace).Delete(podObj.Name, &po)
 
-	_, err := c.kclient.Rbac().RoleBindings(namespaceName).Create(roleBinding)
-
-	if err != nil {
-		log.Println(fmt.Sprintf("Failed to create Role Binding: %s", err.Error()))
-	} else {
-		log.Println(fmt.Sprintf("Created AD RoleBinding for Namespace: %s", roleBinding.Name))
+		log.Printf("Going to delete job '%s'", createdMeta.Reference.Name)
+		// Delete Job itself
+		var jo metav1.DeleteOptions
+		c.kclient.BatchV1Client.Jobs(createdMeta.Reference.Namespace).Delete(createdMeta.Reference.Name, &jo)
 	}
 }

@@ -26,7 +26,9 @@ func main() {
 	wg := &sync.WaitGroup{} // Goroutines can add themselves to this to be waited on so that they finish
 
 	runOutsideCluster := flag.Bool("run-outside-cluster", false, "Set this flag when running outside of the cluster.")
+	namespace := flag.String("namespace", "", "Watch only this namespaces")
 	flag.Parse()
+
 	// Create clientset for interacting with the kubernetes cluster
 	clientset, err := newClientSet(*runOutsideCluster)
 
@@ -34,7 +36,14 @@ func main() {
 		panic(err.Error())
 	}
 
-	controller.NewHyperpilotContrller(clientset).Run(stop, wg)
+	options := map[string]string{
+		"namespace": *namespace,
+	}
+
+	log.Printf("Configured namespace: '%s'", options["namespace"])
+	log.Printf("Starting controller...")
+
+	go controller.NewPodController(clientset, options).Run(stop, wg)
 
 	<-sigs // Wait for signals (this hangs until a signal arrives)
 	log.Printf("Shutting down...")
@@ -47,8 +56,12 @@ func newClientSet(runOutsideCluster bool) (*kubernetes.Clientset, error) {
 	kubeConfigLocation := ""
 
 	if runOutsideCluster == true {
-		homeDir := os.Getenv("HOME")
-		kubeConfigLocation = filepath.Join(homeDir, ".kube", "config")
+		if os.Getenv("KUBECONFIG") != "" {
+			kubeConfigLocation = filepath.Join(os.Getenv("KUBECONFIG"))
+		} else {
+			homeDir := os.Getenv("HOME")
+			kubeConfigLocation = filepath.Join(homeDir, ".kube", "config")
+		}
 	}
 
 	// use the current context in kubeconfig
