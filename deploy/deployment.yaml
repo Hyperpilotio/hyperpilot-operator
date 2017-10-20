@@ -2,31 +2,20 @@ apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
   labels:
-    run: cleanup-operator
-  name: cleanup-operator
-  namespace: default
+    k8s-app: hyperpilot-operator
+  name: hyperpilot-operator
 spec:
   replicas: 1
-  selector:
-    matchLabels:
-      run: cleanup-operator
-  strategy:
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 1
-    type: RollingUpdate
   template:
     metadata:
       labels:
-        run: cleanup-operator
+        k8s-app: hyperpilot-operator
     spec:
-      serviceAccountName: cleanup-operator
       containers:
-      - args:
-        - --namespace=default
-        image: lwolf/kube-cleanup-operator
+      - image: ogre0403/hyperpilot-operator:201710201203
+        command: ["/hyperpilot-operator"]
+        # comment out to monitor all namespace
+        # args: ["-namespace", "hyperpilot"]
         imagePullPolicy: Always
-        name: cleanup-operator
-      dnsPolicy: ClusterFirst
+        name: hyperpilot-operator
       restartPolicy: Always
-      terminationGracePeriodSeconds: 30
