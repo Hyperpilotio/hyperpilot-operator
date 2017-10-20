@@ -1,6 +1,6 @@
 FROM golang:1.9
 
-WORKDIR /go/src/github.com/lwolf/kube-cleanup-operator
+WORKDIR /go/src/github.com/hyperpilotio/hyperpilot-operator
 
 RUN useradd -u 10001 kube-operator
 
@@ -13,7 +13,7 @@ RUN glide install
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o bin/linux/kube-cleanup-operator ./cmd
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o bin/linux/hyperpilot-operator ./cmd
 
 
 FROM alpine
@@ -22,9 +22,9 @@ RUN addgroup -S kube-operator && adduser -S -g kube-operator kube-operator
 
 USER kube-operator
 
-COPY --from=0 /go/src/github.com/lwolf/kube-cleanup-operator/bin/linux/kube-cleanup-operator .
+COPY --from=0 /go/src/github.com/hyperpilotio/hyperpilot-operator/bin/linux/hyperpilot-operator .
 
-ENTRYPOINT ["./kube-cleanup-operator"]
+CMD ["./hyperpilot-operator"]
 
 
 
