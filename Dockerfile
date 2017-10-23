@@ -6,14 +6,10 @@ RUN useradd -u 10001 kube-operator
 
 RUN go get github.com/Masterminds/glide
 
-COPY glide.yaml .
-COPY glide.lock .
-
-RUN glide install
-
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o bin/linux/hyperpilot-operator ./cmd
+RUN make install_deps
+RUN make build-in-docker
 
 
 FROM alpine
@@ -25,23 +21,3 @@ USER kube-operator
 COPY --from=0 /go/src/github.com/hyperpilotio/hyperpilot-operator/bin/linux/hyperpilot-operator .
 
 CMD ["./hyperpilot-operator"]
-
-
-
-## Test OK!!
-## first build using  GOOS=linux GOARCH=amd64 go build -v -i -o bin/linux/kube-cleanup-operator ./cmd
-## Then docker build
-
-#FROM alpine
-#MAINTAINER Sergey Nuzhdin <ipaq.lw@gmail.com>
-#
-#RUN addgroup -S kube-operator && adduser -S -g kube-operator kube-operator
-#
-#USER kube-operator
-#
-#COPY bin/linux/kube-cleanup-operator .
-#
-#ENTRYPOINT ["./kube-cleanup-operator"]
-
-
-

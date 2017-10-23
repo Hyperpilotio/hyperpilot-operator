@@ -11,6 +11,10 @@ build:
 	rm -rf bin/*
 	go build -v -i -o bin/$(OPERATOR_NAME) ./cmd
 
+build-in-docker:
+	rm -rf bin/*
+	CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o bin/linux/$(OPERATOR_NAME) ./cmd
+
 clean:
 	rm -rf bin/*
 

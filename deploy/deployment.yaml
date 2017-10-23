@@ -4,6 +4,7 @@ metadata:
   labels:
     k8s-app: hyperpilot-operator
   name: hyperpilot-operator
+  namespace: hyperpilot
 spec:
   replicas: 1
   template:

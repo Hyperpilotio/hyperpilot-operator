@@ -43,7 +43,7 @@ func main() {
 	log.Printf("Configured namespace: '%s'", options["namespace"])
 	log.Printf("Starting controller...")
 
-	go controller.NewPodController(clientset, options).Run(stop, wg)
+	go controller.NewHyperpilotController(clientset, options).Run(stop, wg)
 
 	<-sigs // Wait for signals (this hangs until a signal arrives)
 	log.Printf("Shutting down...")
