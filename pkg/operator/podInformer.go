@@ -1,4 +1,4 @@
-package controller
+package operator
 
 import (
 	"k8s.io/apimachinery/pkg/watch"
@@ -12,10 +12,16 @@ import (
 )
 
 
+type PodInformer struct{
+	indexInformer cache.SharedIndexInformer
+}
 
-func InitPodInformer(kclient *kubernetes.Clientset, opts map[string]string) cache.SharedIndexInformer{
+func InitPodInformer(kclient *kubernetes.Clientset, opts map[string]string) PodInformer{
+
+	pi := PodInformer{}
+
 	// Create informer for watching Pod
-	podInformer := cache.NewSharedIndexInformer(
+	pi.indexInformer = cache.NewSharedIndexInformer(
 		&cache.ListWatch{
 			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
 				return kclient.CoreV1().Pods(opts["namespace"]).List(options)
@@ -28,15 +34,15 @@ func InitPodInformer(kclient *kubernetes.Clientset, opts map[string]string) cach
 		time.Second*30,
 		cache.Indexers{},
 	)
-	podInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	pi.indexInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		// can get  all existing pod when operator start
 		// and
 		// get new pod with pending status
 		AddFunc: func(cur interface{}) {
-			onPodAdd(cur)
+			pi.onAdd(cur)
 		},
 		DeleteFunc: func(cur interface{}) {
-			onPodDelete(cur)
+			pi.onDelete(cur)
 		},
 		// get event when update, Pending -> Running  -> Successed
 		//                                           |
@@ -46,16 +52,16 @@ func InitPodInformer(kclient *kubernetes.Clientset, opts map[string]string) cach
 			newPod := cur.(*v1.Pod)
 			if oldPod.Status.Phase == "Pending" &&
 				newPod.Status.Phase =="Running"{
-				onPodUpdate(old, cur)
+				pi.onUpdate(old, cur)
 			}
 		},
 	})
 
-	return podInformer
+	return pi
 }
 
 
-func onPodAdd(cur interface{})  {
+func (pi *PodInformer)onAdd(cur interface{})  {
 	podObj := cur.(*v1.Pod)
 
 	if (podObj.Status.Phase == "Running"){
@@ -72,14 +78,14 @@ func onPodAdd(cur interface{})  {
 	}
 }
 
-func onPodDelete(cur interface{}){
+func (pi *PodInformer)onDelete(cur interface{}){
 	podObj := cur.(*v1.Pod)
 	log.Printf("Deleting Pod")
 	log.Printf("\t Pod: %s, \t NameSpace: %s, \t Status: %s \n",
 		podObj.Name ,podObj.Namespace, podObj.Status.Phase)
 }
 
-func onPodUpdate(old, cur interface{})  {
+func (pi *PodInformer)onUpdate(old, cur interface{})  {
 	oldObj := old.(*v1.Pod)
 	newObj := cur.(*v1.Pod)
 	log.Printf("Newly crete Pod (in Running Status)")

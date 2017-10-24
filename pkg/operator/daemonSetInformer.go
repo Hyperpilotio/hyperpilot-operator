@@ -1,4 +1,4 @@
-package controller
+package operator
 
 import (
 	"k8s.io/apimachinery/pkg/watch"
@@ -12,7 +12,14 @@ import (
 	"time"
 )
 
-func InitDaemonSetInformer(kclient *kubernetes.Clientset, opts map[string]string) cache.SharedIndexInformer{
+
+
+type DaemonSetInformer struct{
+	indexInformer cache.SharedIndexInformer
+}
+
+func InitDaemonSetInformer(kclient *kubernetes.Clientset, opts map[string]string) DaemonSetInformer{
+	dsi := DaemonSetInformer{}
 
 	daemonsetInformer :=cache.NewSharedIndexInformer(
 		&cache.ListWatch{
@@ -31,17 +38,28 @@ func InitDaemonSetInformer(kclient *kubernetes.Clientset, opts map[string]string
 
 	daemonsetInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(cur interface{}) {
-			onDaemonSetAdd(cur)
+			dsi.onAdd(cur)
 		},
 	})
 
-	return daemonsetInformer
+	dsi.indexInformer = daemonsetInformer
+	return dsi
 }
 
 
-func onDaemonSetAdd(i interface{}) {
+func (d *DaemonSetInformer)onAdd(i interface{}) {
 	ds := i.(*v1beta1.DaemonSet)
 	log.Printf("[DS] name: %s, namespace: %s", ds.Name, ds.Namespace)
 
 }
+
+func (d *DaemonSetInformer)onDelete(i interface{})  {
+
+}
+
+func (d *DaemonSetInformer)onUpdate(i,j interface{})  {
+
+}
+
+
 

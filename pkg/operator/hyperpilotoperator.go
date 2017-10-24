@@ -1,23 +1,24 @@
-package controller
+package operator
 
 import (
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/cache"
 	"log"
 	"sync"
 )
 
 type Informer interface {
-	onAdd()
-	onDelete()
-	onUpdate()
+	//cache.SharedIndexInformer
+	onAdd(interface{})
+	onDelete(interface{})
+	onUpdate(i,j interface{})
 }
 
 // HyperpilotController watches the kubernetes api for changes to Pods and
 // delete completed Pods without specific annotation
 type HyperpilotController struct {
-	podInformer, deployInformer, daemonSetInformer cache.SharedIndexInformer
-	//podInformer, deployInformer, daemonSetInformer Informer
+	podInformer PodInformer
+	deployInformer DeploymentInformer
+	daemonSetInformer DaemonSetInformer
 	kclient     *kubernetes.Clientset
 }
 
@@ -43,9 +44,10 @@ func (c *HyperpilotController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	wg.Add(1)
 
 	// Execute go function
-	go c.podInformer.Run(stopCh)
-	go c.deployInformer.Run(stopCh)
-	go c.daemonSetInformer.Run(stopCh)
+	go c.podInformer.indexInformer.Run(stopCh)
+	go c.deployInformer.indexInformer.Run(stopCh)
+	//go c.daemonSetInformer.Run(stopCh)
+	go c.daemonSetInformer.indexInformer.Run(stopCh)
 
 	// Wait till we receive a stop signal
 	<-stopCh

@@ -1,4 +1,4 @@
-package controller
+package operator
 
 
 import (
@@ -12,8 +12,15 @@ import (
 	"time"
 )
 
-func InitDeploymentInformer(kclient *kubernetes.Clientset, opts map[string]string) cache.SharedIndexInformer{
-	deployInformer :=cache.NewSharedIndexInformer(
+type DeploymentInformer struct{
+	indexInformer cache.SharedIndexInformer
+}
+
+
+func InitDeploymentInformer(kclient *kubernetes.Clientset, opts map[string]string) DeploymentInformer{
+	di := DeploymentInformer{}
+
+	di.indexInformer = cache.NewSharedIndexInformer(
 		&cache.ListWatch{
 			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
 				return kclient.ExtensionsV1beta1Client.Deployments(opts["namespace"]).List(options)
@@ -27,33 +34,33 @@ func InitDeploymentInformer(kclient *kubernetes.Clientset, opts map[string]strin
 		cache.Indexers{},
 	)
 
-	deployInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	di.indexInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(cur interface{}) {
-			onDeploymentAdd(cur)
+			di.onAdd(cur)
 		},
 		DeleteFunc: func(cur interface{}) {
-			onDeploymentDelete(cur)
+			di.onDelete(cur)
 		},
 		UpdateFunc: func(old, cur interface{}) {
-			onDeploymentUpdate(old, cur)
+			di.onUpdate(old, cur)
 		},
 
 	})
 
-	return deployInformer
+	return di
 }
 
 
-func onDeploymentUpdate(i interface{}, i2 interface{}) {
+func (d *DeploymentInformer)onUpdate(i interface{}, i2 interface{}) {
 	log.Printf("deploy update occur ")
 
 }
 
-func onDeploymentAdd(i interface{}) {
+func (d *DeploymentInformer)onAdd(i interface{}) {
 	deploy := i.(*v1beta1.Deployment)
 	log.Printf("[DEPLOY] name: %s, namespace: %s", deploy.Name, deploy.Namespace)
 }
 
-func onDeploymentDelete(cur interface{})  {
+func (d *DeploymentInformer)onDelete(cur interface{})  {
 	log.Printf("deploy DEL")
 }
