@@ -9,16 +9,20 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"log"
 	"time"
+	"sync"
+	"github.com/hyperpilotio/hyperpilot-operator/pkg/controller"
 )
 
 
 type PodInformer struct{
 	indexInformer cache.SharedIndexInformer
+	controller *sync.Map
 }
 
-func InitPodInformer(kclient *kubernetes.Clientset, opts map[string]string) PodInformer{
-
-	pi := PodInformer{}
+func InitPodInformer(kclient *kubernetes.Clientset, opts map[string]string, controller *sync.Map, ) PodInformer{
+	pi := PodInformer{
+		controller: controller,
+	}
 
 	// Create informer for watching Pod
 	pi.indexInformer = cache.NewSharedIndexInformer(
@@ -61,7 +65,28 @@ func InitPodInformer(kclient *kubernetes.Clientset, opts map[string]string) PodI
 }
 
 
-func (pi *PodInformer)onAdd(cur interface{})  {
+
+func (pi *PodInformer)onAdd(cur1 interface{})  {
+	podObj := cur1.(*v1.Pod)
+
+	pi.controller.Range(func(uuid, ctr interface{}) bool{
+		taskCtr := ctr.(*SnapTaskController)
+
+		for _, matchObj := range taskCtr.MatchList {
+			if matchObj != nil && matchObj.Evaluate(podObj){
+
+				e:= controller.AddEvent{Obj:podObj}
+				taskCtr.TodoEvents <- &e
+				log.Printf("SeNd add event to controller {%s}", uuid.(string))
+				break
+			}
+		}
+
+		return true
+	})
+}
+
+func (pi *PodInformer)onAdd1(cur interface{})  {
 	podObj := cur.(*v1.Pod)
 
 	if (podObj.Status.Phase == "Running"){

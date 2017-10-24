@@ -9,10 +9,9 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/hyperpilotio/hyperpilot-operator/pkg/operator"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
-	"github.com/hyperpilotio/hyperpilot-operator/pkg/controller"
+	"github.com/hyperpilotio/hyperpilot-operator/pkg/operator"
 )
 
 func main() {
@@ -44,12 +43,10 @@ func main() {
 	log.Printf("Configured namespace: '%s'", options["namespace"])
 	log.Printf("Starting operator...")
 
-	go operator.NewHyperpilotController(clientset, options).Run(stop, wg)
+	hpc := operator.NewHyperpilotOperator(clientset, options)
+	go hpc.Run(stop, wg)
 
-	snaptask, err :=controller.NewSnapTask()
-	if err != nil{
-		go snaptask.Run()
-	}
+	go operator.NewSnapTask(clientset, hpc).Run()
 
 	<-sigs // Wait for signals (this hangs until a signal arrives)
 	log.Printf("Shutting down...")
