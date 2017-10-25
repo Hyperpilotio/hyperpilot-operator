@@ -8,18 +8,21 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
 
-	"log"
 	"time"
+	"github.com/hyperpilotio/hyperpilot-operator/pkg/controller/event/daemonset"
 )
 
 
 
 type DaemonSetInformer struct{
 	indexInformer cache.SharedIndexInformer
+	hpc *HyperpilotOpertor
 }
 
-func InitDaemonSetInformer(kclient *kubernetes.Clientset, opts map[string]string) DaemonSetInformer{
-	dsi := DaemonSetInformer{}
+func InitDaemonSetInformer(kclient *kubernetes.Clientset, opts map[string]string, hpc *HyperpilotOpertor) DaemonSetInformer{
+	dsi := DaemonSetInformer{
+		hpc: hpc,
+	}
 
 	daemonsetInformer :=cache.NewSharedIndexInformer(
 		&cache.ListWatch{
@@ -40,6 +43,12 @@ func InitDaemonSetInformer(kclient *kubernetes.Clientset, opts map[string]string
 		AddFunc: func(cur interface{}) {
 			dsi.onAdd(cur)
 		},
+		DeleteFunc: func(cur interface{}) {
+			dsi.onDelete(cur)
+		},
+		UpdateFunc: func(old, cur interface{}) {
+			dsi.onUpdate(old, cur)
+		},
 	})
 
 	dsi.indexInformer = daemonsetInformer
@@ -49,16 +58,38 @@ func InitDaemonSetInformer(kclient *kubernetes.Clientset, opts map[string]string
 
 func (d *DaemonSetInformer)onAdd(i interface{}) {
 	ds := i.(*v1beta1.DaemonSet)
-	log.Printf("[DS] name: %s, namespace: %s", ds.Name, ds.Namespace)
 
+	e := daemonset.AddEvent{
+		Obj: ds,
+	}
+
+	for _, ctr := range d.hpc.daemonSetRegisters {
+		ctr.Receive(&e)
+	}
 }
 
 func (d *DaemonSetInformer)onDelete(i interface{})  {
-
+	ds := i.(*v1beta1.DaemonSet)
+	e := daemonset.DeleteEvent{
+		Cur: ds,
+	}
+	for _, ctr := range d.hpc.daemonSetRegisters {
+		ctr.Receive(&e)
+	}
 }
 
 func (d *DaemonSetInformer)onUpdate(i,j interface{})  {
+	old := i.(*v1beta1.DaemonSet)
+	cur := j.(*v1beta1.DaemonSet)
 
+	e := daemonset.UpdateEvent{
+		Old: old,
+		Cur: cur,
+	}
+
+	for _, ctr := range d.hpc.daemonSetRegisters {
+		ctr.Receive(&e)
+	}
 }
 
 

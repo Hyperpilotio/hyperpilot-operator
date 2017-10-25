@@ -1,33 +1,25 @@
-package controller
+package pod
 
 import (
 	"k8s.io/client-go/pkg/api/v1"
 	"log"
 )
 
-type Event interface {
-	//TODO: add controller or k8s client in arguments
-	Handle()
-}
-
-
 type AddEvent struct {
 	Obj *v1.Pod
 }
 
 type DeleteEvent struct{
-	cur *v1.Pod
+	Obj *v1.Pod
 }
 
 type UpdateEvent struct{
-	old *v1.Pod
-	cur *v1.Pod
+	Old *v1.Pod
+	Cur *v1.Pod
 }
 
 
 func (a *AddEvent)Handle(){
-	log.Printf("handle event in handler")
-
 	if (a.Obj.Status.Phase == "Running"){
 		log.Printf("Existing Pod")
 		log.Printf("\t Pod: %s, \t NameSpace: %s, \t host: %s\n", a.Obj.Name ,a.Obj.Namespace, a.Obj.Spec.NodeName)

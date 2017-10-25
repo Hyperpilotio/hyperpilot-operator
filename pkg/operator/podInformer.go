@@ -7,21 +7,19 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/apimachinery/pkg/runtime"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"log"
 	"time"
-	"sync"
-	"github.com/hyperpilotio/hyperpilot-operator/pkg/controller"
+	"github.com/hyperpilotio/hyperpilot-operator/pkg/controller/event/pod"
 )
 
 
 type PodInformer struct{
 	indexInformer cache.SharedIndexInformer
-	controller *sync.Map
+	hpc *HyperpilotOpertor
 }
 
-func InitPodInformer(kclient *kubernetes.Clientset, opts map[string]string, controller *sync.Map, ) PodInformer{
+func InitPodInformer(kclient *kubernetes.Clientset, opts map[string]string, hpc *HyperpilotOpertor, ) PodInformer{
 	pi := PodInformer{
-		controller: controller,
+		hpc: hpc,
 	}
 
 	// Create informer for watching Pod
@@ -39,88 +37,53 @@ func InitPodInformer(kclient *kubernetes.Clientset, opts map[string]string, cont
 		cache.Indexers{},
 	)
 	pi.indexInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		// can get  all existing pod when operator start
-		// and
-		// get new pod with pending status
 		AddFunc: func(cur interface{}) {
 			pi.onAdd(cur)
 		},
 		DeleteFunc: func(cur interface{}) {
 			pi.onDelete(cur)
 		},
-		// get event when update, Pending -> Running  -> Successed
-		//                                           |
-		//                                            -> Failed
 		UpdateFunc: func(old, cur interface{}) {
-			oldPod := old.(*v1.Pod)
-			newPod := cur.(*v1.Pod)
-			if oldPod.Status.Phase == "Pending" &&
-				newPod.Status.Phase =="Running"{
-				pi.onUpdate(old, cur)
-			}
+			pi.onUpdate(old, cur)
 		},
 	})
 
 	return pi
 }
 
-
-
 func (pi *PodInformer)onAdd(cur1 interface{})  {
 	podObj := cur1.(*v1.Pod)
 
-	pi.controller.Range(func(uuid, ctr interface{}) bool{
-		taskCtr := ctr.(*SnapTaskController)
+	e := pod.AddEvent{Obj: podObj}
 
-		for _, matchObj := range taskCtr.MatchList {
-			if matchObj != nil && matchObj.Evaluate(podObj){
-
-				e:= controller.AddEvent{Obj:podObj}
-				taskCtr.TodoEvents <- &e
-				log.Printf("SeNd add event to controller {%s}", uuid.(string))
-				break
-			}
-		}
-
-		return true
-	})
-}
-
-func (pi *PodInformer)onAdd1(cur interface{})  {
-	podObj := cur.(*v1.Pod)
-
-	if (podObj.Status.Phase == "Running"){
-		log.Printf("Existing Pod")
-		log.Printf("\t Pod: %s, \t NameSpace: %s, \t host: %s\n", podObj.Name ,podObj.Namespace, 	podObj.Spec.NodeName)
-	}else if(podObj.Status.Phase == "Pending"){
-		log.Printf("Newly crete Pod (in Pending Status)")
-		log.Printf("\t Pod: %s, \t NameSpace: %s, \t host: %s \n", podObj.Name ,podObj.Namespace,	podObj.Spec.NodeName)
-	}else if (podObj.Status.Phase == "Succeeded"){
-		log.Printf("Completed Pod (in Successed Status)")
-		log.Printf("\t Pod: %s, \t NameSpace: %s, \t host: %s \n", podObj.Name ,podObj.Namespace, podObj.Spec.NodeName)
-	}else{
-		log.Printf("Not defined Phase: %s", podObj.Status.Phase)
+	for _, ctr := range pi.hpc.podRegisters {
+		ctr.Receive(&e)
 	}
 }
 
 func (pi *PodInformer)onDelete(cur interface{}){
 	podObj := cur.(*v1.Pod)
-	log.Printf("Deleting Pod")
-	log.Printf("\t Pod: %s, \t NameSpace: %s, \t Status: %s \n",
-		podObj.Name ,podObj.Namespace, podObj.Status.Phase)
+	e := pod.DeleteEvent{Obj: podObj}
+
+	for _, ctr := range pi.hpc.podRegisters {
+		ctr.Receive(&e)
+	}
+
 }
 
 func (pi *PodInformer)onUpdate(old, cur interface{})  {
 	oldObj := old.(*v1.Pod)
 	newObj := cur.(*v1.Pod)
-	log.Printf("Newly crete Pod (in Running Status)")
-	if oldObj.Status.Phase == "Pending" &&
-		newObj.Status.Phase =="Running"{
-		log.Printf("\t Pod: %s, \t NameSpace: %s, \t host: %s \n", newObj.Name ,newObj.Namespace,	newObj.Spec.NodeName)
+
+	e := pod.UpdateEvent{
+		Old: oldObj,
+		Cur: newObj,
 	}
 
+	for _, ctr := range pi.hpc.podRegisters {
+		ctr.Receive(&e)
+	}
 }
-
 
 
 

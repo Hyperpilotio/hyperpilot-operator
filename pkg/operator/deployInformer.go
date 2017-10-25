@@ -2,7 +2,6 @@ package operator
 
 
 import (
-	"log"
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
@@ -10,15 +9,19 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"time"
+	"github.com/hyperpilotio/hyperpilot-operator/pkg/controller/event/deployment"
 )
 
 type DeploymentInformer struct{
 	indexInformer cache.SharedIndexInformer
+	hpc *HyperpilotOpertor
 }
 
 
-func InitDeploymentInformer(kclient *kubernetes.Clientset, opts map[string]string) DeploymentInformer{
-	di := DeploymentInformer{}
+func InitDeploymentInformer(kclient *kubernetes.Clientset, opts map[string]string, hpc *HyperpilotOpertor,) DeploymentInformer{
+	di := DeploymentInformer{
+		hpc: hpc,
+	}
 
 	di.indexInformer = cache.NewSharedIndexInformer(
 		&cache.ListWatch{
@@ -50,17 +53,38 @@ func InitDeploymentInformer(kclient *kubernetes.Clientset, opts map[string]strin
 	return di
 }
 
+func (d *DeploymentInformer)onAdd(i interface{}) {
+	deployObj := i.(*v1beta1.Deployment)
+	e := deployment.AddEvent{
+		Obj: deployObj,
+	}
 
-func (d *DeploymentInformer)onUpdate(i interface{}, i2 interface{}) {
-	log.Printf("deploy update occur ")
-
+	for _, ctr := range d.hpc.deployRegisters {
+		ctr.Receive(&e)
+	}
 }
 
-func (d *DeploymentInformer)onAdd(i interface{}) {
-	deploy := i.(*v1beta1.Deployment)
-	log.Printf("[DEPLOY] name: %s, namespace: %s", deploy.Name, deploy.Namespace)
+func (d *DeploymentInformer)onUpdate(i1 interface{}, i2 interface{}) {
+	old := i1.(*v1beta1.Deployment)
+	cur := i2.(*v1beta1.Deployment)
+
+	e := deployment.UpdateEvent{
+		Old: old,
+		Cur: cur,
+	}
+
+	for _, ctr := range d.hpc.deployRegisters {
+		ctr.Receive(&e)
+	}
+
 }
 
 func (d *DeploymentInformer)onDelete(cur interface{})  {
-	log.Printf("deploy DEL")
+	deployObj := cur.(*v1beta1.Deployment)
+	e := deployment.DeleteEvent{Cur: deployObj}
+
+	for _, ctr := range d.hpc.deployRegisters {
+		ctr.Receive(&e)
+	}
+
 }
