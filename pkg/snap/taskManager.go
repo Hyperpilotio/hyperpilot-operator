@@ -30,7 +30,7 @@ func NewTask(name string, workflowMap *wmap.WorkflowMap, opts ...*RunOpts) (*Tas
 			ScheduleType:      "simple",
 			ScheduleInterval:  "5s",
 			StartTaskOnCreate: true,
-			MaxFailure:        1,
+			MaxFailure:        -1,
 		}
 	} else {
 		runOpts = opts[0]
@@ -44,7 +44,6 @@ func NewTask(name string, workflowMap *wmap.WorkflowMap, opts ...*RunOpts) (*Tas
 
 type SnapTaskManager struct {
 	*client.Client
-	Opts *RunOpts
 }
 
 func NewSnapTaskManager(url, version string) (*SnapTaskManager, error) {
@@ -55,12 +54,6 @@ func NewSnapTaskManager(url, version string) (*SnapTaskManager, error) {
 	}
 	return &SnapTaskManager{
 		Client: snapClient,
-		Opts: &RunOpts{
-			ScheduleType:      "simple",
-			ScheduleInterval:  "1s",
-			StartTaskOnCreate: true,
-			MaxFailure:        0,
-		},
 	}, nil
 }
 

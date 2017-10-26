@@ -62,7 +62,7 @@ func (collector *Collector) Join(workflowMap *wmap.WorkflowMap) *wmap.WorkflowMa
 }
 
 func NewProcessor(processorName string, processorVersion int, config map[string]interface{}) *Processor {
-	p := wmap.NewProcessNode(processorName, 1)
+	p := wmap.NewProcessNode(processorName, processorVersion)
 	for k, v := range config {
 		p.AddConfigItem(k, v)
 	}
