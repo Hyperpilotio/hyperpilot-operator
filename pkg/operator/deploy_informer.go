@@ -61,7 +61,7 @@ func (d *DeploymentInformer) onAdd(i interface{}) {
 	}
 
 	for _, ctr := range d.hpc.deployRegisters {
-		ctr.Receive(&e)
+		go ctr.Receive(&e)
 	}
 }
 
@@ -78,7 +78,7 @@ func (d *DeploymentInformer) onUpdate(i1 interface{}, i2 interface{}) {
 	}
 
 	for _, ctr := range d.hpc.deployRegisters {
-		ctr.Receive(&e)
+		go ctr.Receive(&e)
 	}
 
 }
@@ -95,7 +95,7 @@ func (d *DeploymentInformer) onDelete(cur interface{}) {
 	}
 
 	for _, ctr := range d.hpc.deployRegisters {
-		ctr.Receive(&e)
+		go ctr.Receive(&e)
 	}
 
 }

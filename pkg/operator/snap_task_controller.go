@@ -5,18 +5,7 @@ import (
 	"github.com/emicklei/go-restful/log"
 )
 
-type SnapTaskController struct {
-	BaseController
-}
-
-func NewSnapTask(hpc *HyperpilotOpertor, res ResourceEnum) *SnapTaskController {
-	s := SnapTaskController{
-		BaseController: BaseController{},
-	}
-
-	s.Register(hpc, res)
-	return &s
-}
+type SnapTaskController struct {}
 
 func (s *SnapTaskController) Close() {
 

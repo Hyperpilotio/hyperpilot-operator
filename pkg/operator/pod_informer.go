@@ -61,7 +61,7 @@ func (pi *PodInformer) onAdd(cur1 interface{}) {
 	}
 
 	for _, ctr := range pi.hpc.podRegisters {
-		ctr.Receive(&e)
+		go ctr.Receive(&e)
 	}
 }
 
@@ -76,7 +76,7 @@ func (pi *PodInformer) onDelete(cur interface{}) {
 		Old: nil,
 	}
 	for _, ctr := range pi.hpc.podRegisters {
-		ctr.Receive(&e)
+		go ctr.Receive(&e)
 	}
 
 }
@@ -94,6 +94,6 @@ func (pi *PodInformer) onUpdate(old, cur interface{}) {
 	}
 
 	for _, ctr := range pi.hpc.podRegisters {
-		ctr.Receive(&e)
+		go ctr.Receive(&e)
 	}
 }

@@ -22,19 +22,19 @@ type HyperpilotOpertor struct {
 	kclient           *kubernetes.Clientset
 
 	mu                 sync.Mutex
-	podRegisters       []Controller
-	deployRegisters    []Controller
-	daemonSetRegisters []Controller
-	nsRegisters        []Controller
+	podRegisters       []BaseController
+	deployRegisters    []BaseController
+	daemonSetRegisters []BaseController
+	nsRegisters        []BaseController
 }
 
 // NewHyperpilotOperator creates a new NewHyperpilotOperator
 func NewHyperpilotOperator(kclient *kubernetes.Clientset, opts map[string]string) *HyperpilotOpertor {
 	hpc := &HyperpilotOpertor{
-		podRegisters:       make([]Controller, 0),
-		deployRegisters:    make([]Controller, 0),
-		daemonSetRegisters: make([]Controller, 0),
-		nsRegisters:        make([]Controller, 0),
+		podRegisters:       make([]BaseController, 0),
+		deployRegisters:    make([]BaseController, 0),
+		daemonSetRegisters: make([]BaseController, 0),
+		nsRegisters:        make([]BaseController, 0),
 		kclient:            kclient,
 	}
 
@@ -56,13 +56,13 @@ func (c *HyperpilotOpertor) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	// Execute go function
 	go c.podInformer.indexInformer.Run(stopCh)
 	go c.deployInformer.indexInformer.Run(stopCh)
-	//go c.daemonSetInformer.indexInformer.Run(stopCh)
+	go c.daemonSetInformer.indexInformer.Run(stopCh)
 
 	// Wait till we receive a stop signal
 	<-stopCh
 }
 
-func (c *HyperpilotOpertor) Accept(s Controller, res ResourceEnum) {
+func (c *HyperpilotOpertor) Accept(s BaseController, res ResourceEnum) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 

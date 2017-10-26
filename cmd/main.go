@@ -44,9 +44,10 @@ func main() {
 	log.Printf("Starting operator...")
 
 	hpc := operator.NewHyperpilotOperator(clientset, options)
+	snapController := operator.SnapTaskController{}
+	snapController.Register(hpc,operator.POD|operator.DEPLOYMENT)
 	go hpc.Run(stop, wg)
 
-	go operator.NewSnapTask(hpc, operator.POD|operator.DEPLOYMENT)
 
 	<-sigs // Wait for signals (this hangs until a signal arrives)
 	log.Printf("Shutting down...")

@@ -12,12 +12,12 @@ func (this ResourceEnum) IsRegister(flag ResourceEnum) bool {
 	return this|flag == this
 }
 
-type Controller interface {
+type BaseController interface {
 	Init()
 	Register(hpc *HyperpilotOpertor, res ResourceEnum)
 	Receive(e Event)
 	Close()
 }
 
-type BaseController struct {
-}
+//type BaseController struct {
+//}

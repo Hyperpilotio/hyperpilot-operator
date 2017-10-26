@@ -63,7 +63,7 @@ func (d *DaemonSetInformer) onAdd(i interface{}) {
 	}
 
 	for _, ctr := range d.hpc.daemonSetRegisters {
-		ctr.Receive(&e)
+		go ctr.Receive(&e)
 	}
 }
 
@@ -79,7 +79,7 @@ func (d *DaemonSetInformer) onDelete(i interface{}) {
 	}
 
 	for _, ctr := range d.hpc.daemonSetRegisters {
-		ctr.Receive(&e)
+		go ctr.Receive(&e)
 	}
 }
 
@@ -96,6 +96,6 @@ func (d *DaemonSetInformer) onUpdate(i, j interface{}) {
 	}
 
 	for _, ctr := range d.hpc.daemonSetRegisters {
-		ctr.Receive(&e)
+		go ctr.Receive(&e)
 	}
 }
