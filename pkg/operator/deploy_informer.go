@@ -1,24 +1,21 @@
 package operator
 
-
 import (
-	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/cache"
-	"k8s.io/apimachinery/pkg/watch"
-	"k8s.io/apimachinery/pkg/runtime"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
+	"k8s.io/client-go/tools/cache"
 	"time"
-	"github.com/hyperpilotio/hyperpilot-operator/pkg/controller/event/deployment"
 )
 
-type DeploymentInformer struct{
+type DeploymentInformer struct {
 	indexInformer cache.SharedIndexInformer
-	hpc *HyperpilotOpertor
+	hpc           *HyperpilotOpertor
 }
 
-
-func InitDeploymentInformer(kclient *kubernetes.Clientset, opts map[string]string, hpc *HyperpilotOpertor,) DeploymentInformer{
+func InitDeploymentInformer(kclient *kubernetes.Clientset, opts map[string]string, hpc *HyperpilotOpertor) DeploymentInformer {
 	di := DeploymentInformer{
 		hpc: hpc,
 	}
@@ -47,16 +44,20 @@ func InitDeploymentInformer(kclient *kubernetes.Clientset, opts map[string]strin
 		UpdateFunc: func(old, cur interface{}) {
 			di.onUpdate(old, cur)
 		},
-
 	})
 
 	return di
 }
 
-func (d *DeploymentInformer)onAdd(i interface{}) {
+func (d *DeploymentInformer) onAdd(i interface{}) {
 	deployObj := i.(*v1beta1.Deployment)
-	e := deployment.AddEvent{
-		Obj: deployObj,
+
+	e := DeploymentEvent{
+		ResourceEvent: ResourceEvent{
+			Event_type: ADD,
+		},
+		Cur: deployObj,
+		Old: nil,
 	}
 
 	for _, ctr := range d.hpc.deployRegisters {
@@ -64,13 +65,16 @@ func (d *DeploymentInformer)onAdd(i interface{}) {
 	}
 }
 
-func (d *DeploymentInformer)onUpdate(i1 interface{}, i2 interface{}) {
+func (d *DeploymentInformer) onUpdate(i1 interface{}, i2 interface{}) {
 	old := i1.(*v1beta1.Deployment)
 	cur := i2.(*v1beta1.Deployment)
 
-	e := deployment.UpdateEvent{
-		Old: old,
+	e := DeploymentEvent{
+		ResourceEvent: ResourceEvent{
+			Event_type: UPDATE,
+		},
 		Cur: cur,
+		Old: old,
 	}
 
 	for _, ctr := range d.hpc.deployRegisters {
@@ -79,9 +83,16 @@ func (d *DeploymentInformer)onUpdate(i1 interface{}, i2 interface{}) {
 
 }
 
-func (d *DeploymentInformer)onDelete(cur interface{})  {
+func (d *DeploymentInformer) onDelete(cur interface{}) {
 	deployObj := cur.(*v1beta1.Deployment)
-	e := deployment.DeleteEvent{Cur: deployObj}
+
+	e := DeploymentEvent{
+		ResourceEvent: ResourceEvent{
+			Event_type: DELETE,
+		},
+		Cur: deployObj,
+		Old: nil,
+	}
 
 	for _, ctr := range d.hpc.deployRegisters {
 		ctr.Receive(&e)

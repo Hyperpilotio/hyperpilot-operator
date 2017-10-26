@@ -1,23 +1,21 @@
 package operator
 
 import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/api/v1"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/apimachinery/pkg/runtime"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"time"
-	"github.com/hyperpilotio/hyperpilot-operator/pkg/controller/event/pod"
 )
 
-
-type PodInformer struct{
+type PodInformer struct {
 	indexInformer cache.SharedIndexInformer
-	hpc *HyperpilotOpertor
+	hpc           *HyperpilotOpertor
 }
 
-func InitPodInformer(kclient *kubernetes.Clientset, opts map[string]string, hpc *HyperpilotOpertor, ) PodInformer{
+func InitPodInformer(kclient *kubernetes.Clientset, opts map[string]string, hpc *HyperpilotOpertor) PodInformer {
 	pi := PodInformer{
 		hpc: hpc,
 	}
@@ -51,39 +49,51 @@ func InitPodInformer(kclient *kubernetes.Clientset, opts map[string]string, hpc 
 	return pi
 }
 
-func (pi *PodInformer)onAdd(cur1 interface{})  {
+func (pi *PodInformer) onAdd(cur1 interface{}) {
 	podObj := cur1.(*v1.Pod)
 
-	e := pod.AddEvent{Obj: podObj}
+	e := PodEvent{
+		ResourceEvent: ResourceEvent{
+			Event_type: ADD,
+		},
+		Cur: podObj,
+		Old: nil,
+	}
 
 	for _, ctr := range pi.hpc.podRegisters {
 		ctr.Receive(&e)
 	}
 }
 
-func (pi *PodInformer)onDelete(cur interface{}){
+func (pi *PodInformer) onDelete(cur interface{}) {
 	podObj := cur.(*v1.Pod)
-	e := pod.DeleteEvent{Obj: podObj}
 
+	e := PodEvent{
+		ResourceEvent: ResourceEvent{
+			Event_type: DELETE,
+		},
+		Cur: podObj,
+		Old: nil,
+	}
 	for _, ctr := range pi.hpc.podRegisters {
 		ctr.Receive(&e)
 	}
 
 }
 
-func (pi *PodInformer)onUpdate(old, cur interface{})  {
+func (pi *PodInformer) onUpdate(old, cur interface{}) {
 	oldObj := old.(*v1.Pod)
-	newObj := cur.(*v1.Pod)
+	curObj := cur.(*v1.Pod)
 
-	e := pod.UpdateEvent{
+	e := PodEvent{
+		ResourceEvent: ResourceEvent{
+			Event_type: UPDATE,
+		},
 		Old: oldObj,
-		Cur: newObj,
+		Cur: curObj,
 	}
 
 	for _, ctr := range pi.hpc.podRegisters {
 		ctr.Receive(&e)
 	}
 }
-
-
-

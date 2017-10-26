@@ -1,30 +1,27 @@
 package operator
 
 import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/cache"
-	"k8s.io/apimachinery/pkg/runtime"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
+	"k8s.io/client-go/tools/cache"
 
 	"time"
-	"github.com/hyperpilotio/hyperpilot-operator/pkg/controller/event/daemonset"
 )
 
-
-
-type DaemonSetInformer struct{
+type DaemonSetInformer struct {
 	indexInformer cache.SharedIndexInformer
-	hpc *HyperpilotOpertor
+	hpc           *HyperpilotOpertor
 }
 
-func InitDaemonSetInformer(kclient *kubernetes.Clientset, opts map[string]string, hpc *HyperpilotOpertor) DaemonSetInformer{
+func InitDaemonSetInformer(kclient *kubernetes.Clientset, opts map[string]string, hpc *HyperpilotOpertor) DaemonSetInformer {
 	dsi := DaemonSetInformer{
 		hpc: hpc,
 	}
 
-	daemonsetInformer :=cache.NewSharedIndexInformer(
+	daemonsetInformer := cache.NewSharedIndexInformer(
 		&cache.ListWatch{
 			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
 				return kclient.ExtensionsV1beta1Client.DaemonSets(opts["namespace"]).List(options)
@@ -37,7 +34,6 @@ func InitDaemonSetInformer(kclient *kubernetes.Clientset, opts map[string]string
 		time.Second*30,
 		cache.Indexers{},
 	)
-
 
 	daemonsetInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(cur interface{}) {
@@ -55,42 +51,51 @@ func InitDaemonSetInformer(kclient *kubernetes.Clientset, opts map[string]string
 	return dsi
 }
 
-
-func (d *DaemonSetInformer)onAdd(i interface{}) {
+func (d *DaemonSetInformer) onAdd(i interface{}) {
 	ds := i.(*v1beta1.DaemonSet)
 
-	e := daemonset.AddEvent{
-		Obj: ds,
-	}
-
-	for _, ctr := range d.hpc.daemonSetRegisters {
-		ctr.Receive(&e)
-	}
-}
-
-func (d *DaemonSetInformer)onDelete(i interface{})  {
-	ds := i.(*v1beta1.DaemonSet)
-	e := daemonset.DeleteEvent{
+	e := DaemonSetEvent{
+		ResourceEvent: ResourceEvent{
+			Event_type: ADD,
+		},
 		Cur: ds,
+		Old: nil,
 	}
+
 	for _, ctr := range d.hpc.daemonSetRegisters {
 		ctr.Receive(&e)
 	}
 }
 
-func (d *DaemonSetInformer)onUpdate(i,j interface{})  {
+func (d *DaemonSetInformer) onDelete(i interface{}) {
+	ds := i.(*v1beta1.DaemonSet)
+
+	e := DaemonSetEvent{
+		ResourceEvent: ResourceEvent{
+			Event_type: DELETE,
+		},
+		Cur: ds,
+		Old: nil,
+	}
+
+	for _, ctr := range d.hpc.daemonSetRegisters {
+		ctr.Receive(&e)
+	}
+}
+
+func (d *DaemonSetInformer) onUpdate(i, j interface{}) {
 	old := i.(*v1beta1.DaemonSet)
 	cur := j.(*v1beta1.DaemonSet)
 
-	e := daemonset.UpdateEvent{
-		Old: old,
+	e := DaemonSetEvent{
+		ResourceEvent: ResourceEvent{
+			Event_type: UPDATE,
+		},
 		Cur: cur,
+		Old: old,
 	}
 
 	for _, ctr := range d.hpc.daemonSetRegisters {
 		ctr.Receive(&e)
 	}
 }
-
-
-

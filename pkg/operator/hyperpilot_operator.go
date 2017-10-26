@@ -10,37 +10,33 @@ type Informer interface {
 	//cache.SharedIndexInformer
 	onAdd(interface{})
 	onDelete(interface{})
-	onUpdate(i,j interface{})
+	onUpdate(i, j interface{})
 }
 
 // HyperpilotOpertor watches the kubernetes api for changes to Pods and
 // delete completed Pods without specific annotation
 type HyperpilotOpertor struct {
-	podInformer PodInformer
-	deployInformer DeploymentInformer
+	podInformer       PodInformer
+	deployInformer    DeploymentInformer
 	daemonSetInformer DaemonSetInformer
-	kclient     *kubernetes.Clientset
+	kclient           *kubernetes.Clientset
 
-	// map between resource type <-> controller
-	//registeredController *sync.Map
-
-	podRegisters 		[]IController
-	deployRegisters 	[]IController
-	daemonSetRegisters 	[]IController
-	nsRegisters			[]IController
+	mu                 sync.Mutex
+	podRegisters       []Controller
+	deployRegisters    []Controller
+	daemonSetRegisters []Controller
+	nsRegisters        []Controller
 }
-
 
 // NewHyperpilotOperator creates a new NewHyperpilotOperator
 func NewHyperpilotOperator(kclient *kubernetes.Clientset, opts map[string]string) *HyperpilotOpertor {
 	hpc := &HyperpilotOpertor{
-		podRegisters: 		make([]IController, 0),
-		deployRegisters: 	make([]IController, 0),
-		daemonSetRegisters: make([]IController, 0),
-		nsRegisters: 		make([]IController, 0),
+		podRegisters:       make([]Controller, 0),
+		deployRegisters:    make([]Controller, 0),
+		daemonSetRegisters: make([]Controller, 0),
+		nsRegisters:        make([]Controller, 0),
 		kclient:            kclient,
 	}
-
 
 	hpc.podInformer = InitPodInformer(kclient, opts, hpc)
 	hpc.deployInformer = InitDeploymentInformer(kclient, opts, hpc)
@@ -66,26 +62,27 @@ func (c *HyperpilotOpertor) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	<-stopCh
 }
 
-//todo: slice is not thread-safe
-func (c *HyperpilotOpertor)Accept(s IController, res resourceEnum) {
+func (c *HyperpilotOpertor) Accept(s Controller, res ResourceEnum) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-	if res.IsRegister(POD){
+	if res.IsRegister(POD) {
 		c.podRegisters = append(c.podRegisters, s)
 		log.Printf("Contoller {%s} registered resource POD", s)
 	}
 
-	if res.IsRegister(DEPLOYMENT){
+	if res.IsRegister(DEPLOYMENT) {
 		c.deployRegisters = append(c.deployRegisters, s)
 		log.Printf("Contoller {%s} registered resource DEPLOYMENT", s)
 	}
 
-	if res.IsRegister(DAEMONSET){
+	if res.IsRegister(DAEMONSET) {
 		c.daemonSetRegisters = append(c.daemonSetRegisters, s)
 		log.Printf("Contoller {%s} registered resource DAEMONSET", s)
 	}
 
 }
 
-func (c *HyperpilotOpertor)Dcommission(id string) {
+func (c *HyperpilotOpertor) Dcommission(id string) {
 	//c.registeredController.Delete(id)
 }
