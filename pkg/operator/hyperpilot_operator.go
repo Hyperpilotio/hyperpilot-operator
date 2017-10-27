@@ -6,26 +6,29 @@ import (
 	"sync"
 )
 
-type Informer interface {
-	//cache.SharedIndexInformer
-	onAdd(interface{})
-	onDelete(interface{})
-	onUpdate(i, j interface{})
-}
-
 // HyperpilotOpertor watches the kubernetes api for changes to Pods and
 // delete completed Pods without specific annotation
 type HyperpilotOpertor struct {
 	podInformer       PodInformer
 	deployInformer    DeploymentInformer
 	daemonSetInformer DaemonSetInformer
-	kclient           *kubernetes.Clientset
+	nodeInformer      NodeInformer
+
+	kclient *kubernetes.Clientset
 
 	mu                 sync.Mutex
 	podRegisters       []BaseController
 	deployRegisters    []BaseController
 	daemonSetRegisters []BaseController
 	nsRegisters        []BaseController
+	nodeRegisters      []BaseController
+
+	// pod and node mapping
+
+}
+
+func (opertor *HyperpilotOpertor) GetWorld() {
+	//
 }
 
 // NewHyperpilotOperator creates a new NewHyperpilotOperator
@@ -35,12 +38,14 @@ func NewHyperpilotOperator(kclient *kubernetes.Clientset, opts map[string]string
 		deployRegisters:    make([]BaseController, 0),
 		daemonSetRegisters: make([]BaseController, 0),
 		nsRegisters:        make([]BaseController, 0),
+		nodeRegisters:      make([]BaseController, 0),
 		kclient:            kclient,
 	}
 
 	hpc.podInformer = InitPodInformer(kclient, opts, hpc)
 	hpc.deployInformer = InitDeploymentInformer(kclient, opts, hpc)
 	hpc.daemonSetInformer = InitDaemonSetInformer(kclient, opts, hpc)
+	hpc.nodeInformer = InitNodeInformer(kclient, opts, hpc)
 	return hpc
 }
 
@@ -57,6 +62,7 @@ func (c *HyperpilotOpertor) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	go c.podInformer.indexInformer.Run(stopCh)
 	go c.deployInformer.indexInformer.Run(stopCh)
 	go c.daemonSetInformer.indexInformer.Run(stopCh)
+	go c.nodeInformer.indexInformer.Run(stopCh)
 
 	// Wait till we receive a stop signal
 	<-stopCh
@@ -79,6 +85,11 @@ func (c *HyperpilotOpertor) Accept(s BaseController, res ResourceEnum) {
 	if res.IsRegister(DAEMONSET) {
 		c.daemonSetRegisters = append(c.daemonSetRegisters, s)
 		log.Printf("Contoller {%s} registered resource DAEMONSET", s)
+	}
+
+	if res.IsRegister(NODE) {
+		c.nodeRegisters = append(c.nodeRegisters, s)
+		log.Printf("Contoller {%s} registered resource NODE", s)
 	}
 
 }

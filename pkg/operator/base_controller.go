@@ -6,6 +6,7 @@ const (
 	POD        ResourceEnum = 1 << iota
 	DEPLOYMENT ResourceEnum = 2
 	DAEMONSET  ResourceEnum = 4
+	NODE       ResourceEnum = 8
 )
 
 func (this ResourceEnum) IsRegister(flag ResourceEnum) bool {

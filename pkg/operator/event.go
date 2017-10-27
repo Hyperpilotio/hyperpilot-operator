@@ -21,6 +21,16 @@ type Event interface {
 	GetType() EventType
 }
 
+type NodeEvent struct {
+	ResourceEvent
+	Cur *v1.Node
+	Old *v1.Node
+}
+
+func (r *NodeEvent) GetType() EventType {
+	return r.Event_type
+}
+
 type PodEvent struct {
 	ResourceEvent
 	Cur *v1.Pod

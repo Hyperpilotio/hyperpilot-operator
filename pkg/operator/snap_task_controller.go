@@ -5,7 +5,7 @@ import (
 	"github.com/emicklei/go-restful/log"
 )
 
-type SnapTaskController struct {}
+type SnapTaskController struct{}
 
 func (s *SnapTaskController) Close() {
 
@@ -16,6 +16,7 @@ func (s *SnapTaskController) Register(hpc *HyperpilotOpertor, res ResourceEnum) 
 }
 
 func (s *SnapTaskController) Init() {
+	//get what?
 
 }
 
@@ -36,6 +37,21 @@ func (s *SnapTaskController) Receive(e Event) {
 		ProcessDaemonSet(e.(*DaemonSetEvent))
 	}
 
+	_, ok = e.(*NodeEvent)
+	if ok {
+		ProcessNode(e.(*NodeEvent))
+	}
+
+}
+func ProcessNode(e *NodeEvent) {
+	switch e.Event_type {
+	case ADD:
+		log.Printf("do node add work")
+	case DELETE:
+		log.Printf("do node delete work")
+	case UPDATE:
+		log.Printf("do node update work")
+	}
 }
 
 func (s *SnapTaskController) String() string {
