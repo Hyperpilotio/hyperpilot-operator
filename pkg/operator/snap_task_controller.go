@@ -1,11 +1,14 @@
 package operator
 
 import (
+	"database/sql"
 	"fmt"
-	"github.com/emicklei/go-restful/log"
+	"log"
 )
 
-type SnapTaskController struct{}
+type SnapTaskController struct {
+	TaskController
+}
 
 func (s *SnapTaskController) Close() {
 
@@ -16,8 +19,12 @@ func (s *SnapTaskController) Register(hpc *HyperpilotOpertor, res ResourceEnum) 
 }
 
 func (s *SnapTaskController) Init() {
-	//get what?
-
+	//setup RAM SQL access permission from operator
+	d, err := sql.Open("ramsql", K8SEVENT)
+	if err != nil {
+		log.Fatalf("sql.Open : Error : %s\n", err)
+	}
+	s.DB = d
 }
 
 func (s *SnapTaskController) Receive(e Event) {
@@ -43,6 +50,7 @@ func (s *SnapTaskController) Receive(e Event) {
 	}
 
 }
+
 func ProcessNode(e *NodeEvent) {
 	switch e.Event_type {
 	case ADD:

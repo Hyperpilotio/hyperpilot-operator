@@ -62,6 +62,8 @@ func (d *DaemonSetInformer) onAdd(i interface{}) {
 		Old: nil,
 	}
 
+	e.UpdateGlobalStatus()
+
 	for _, ctr := range d.hpc.daemonSetRegisters {
 		go ctr.Receive(&e)
 	}
@@ -77,6 +79,8 @@ func (d *DaemonSetInformer) onDelete(i interface{}) {
 		Cur: ds,
 		Old: nil,
 	}
+
+	e.UpdateGlobalStatus()
 
 	for _, ctr := range d.hpc.daemonSetRegisters {
 		go ctr.Receive(&e)
@@ -94,6 +98,8 @@ func (d *DaemonSetInformer) onUpdate(i, j interface{}) {
 		Cur: cur,
 		Old: old,
 	}
+
+	e.UpdateGlobalStatus()
 
 	for _, ctr := range d.hpc.daemonSetRegisters {
 		go ctr.Receive(&e)

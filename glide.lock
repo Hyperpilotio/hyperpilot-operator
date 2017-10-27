@@ -1,5 +1,5 @@
 hash: a5a3e1e881fe028feae86659eef770c74e6ed210a0479e742a09684cbfae799f
-updated: 2017-10-23T16:18:05.25449298-07:00
+updated: 2017-10-27T12:10:20.079700033-07:00
 imports:
 - name: github.com/davecgh/go-spew
   version: 5215b55f46b2b919f50a1df0eaa5886afe4e3b3d
@@ -55,12 +55,18 @@ imports:
   - buffer
   - jlexer
   - jwriter
+- name: github.com/proullon/ramsql
+  version: 813f6472da3e90d580ce1be8d5fd54db89635bc0
+  subpackages:
+  - driver
+  - engine
+  - engine/log
+  - engine/parser
+  - engine/protocol
 - name: github.com/PuerkitoBio/purell
   version: 8a290539e2e8629dbc4e6bad948158f790ec31f4
 - name: github.com/PuerkitoBio/urlesc
   version: 5bd2802263f21d8788851d5305584c82a5c75d7e
-- name: github.com/satori/go.uuid
-  version: 5bf94b69c6b68ee1b541973bb8e1144db23a194b
 - name: github.com/spf13/pflag
   version: 9ff6c6923cfffbcd502984b8e0c80539a94968b7
 - name: github.com/ugorji/go

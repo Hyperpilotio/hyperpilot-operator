@@ -8,8 +8,6 @@ import (
 	"k8s.io/client-go/pkg/api/v1"
 	"k8s.io/client-go/tools/cache"
 	"time"
-
-	"github.com/emicklei/go-restful/log"
 )
 
 type NodeInformer struct {
@@ -55,7 +53,6 @@ func InitNodeInformer(kclient *kubernetes.Clientset, opts map[string]string, hpc
 func (ni *NodeInformer) onAdd(cur1 interface{}) {
 	nodeObj := cur1.(*v1.Node)
 
-	go ni.ProcessAddEvent(nodeObj)
 	e := NodeEvent{
 		ResourceEvent: ResourceEvent{
 			Event_type: ADD,
@@ -63,6 +60,8 @@ func (ni *NodeInformer) onAdd(cur1 interface{}) {
 		Cur: nodeObj,
 		Old: nil,
 	}
+
+	e.UpdateGlobalStatus()
 
 	for _, ctr := range ni.hpc.nodeRegisters {
 		go ctr.Receive(&e)
@@ -72,7 +71,6 @@ func (ni *NodeInformer) onAdd(cur1 interface{}) {
 func (ni *NodeInformer) onDelete(cur1 interface{}) {
 	nodeObj := cur1.(*v1.Node)
 
-	go ni.ProcessDeleteEvent(nodeObj)
 	e := NodeEvent{
 		ResourceEvent: ResourceEvent{
 			Event_type: DELETE,
@@ -80,6 +78,7 @@ func (ni *NodeInformer) onDelete(cur1 interface{}) {
 		Cur: nodeObj,
 		Old: nil,
 	}
+	e.UpdateGlobalStatus()
 
 	for _, ctr := range ni.hpc.nodeRegisters {
 		go ctr.Receive(&e)
@@ -89,7 +88,6 @@ func (ni *NodeInformer) onDelete(cur1 interface{}) {
 func (ni *NodeInformer) onUpdate(old, cur interface{}) {
 	oldObj := old.(*v1.Node)
 	curObj := cur.(*v1.Node)
-	go ni.ProcessUpdateEvent(oldObj, curObj)
 
 	e := NodeEvent{
 		ResourceEvent: ResourceEvent{
@@ -98,23 +96,24 @@ func (ni *NodeInformer) onUpdate(old, cur interface{}) {
 		Old: oldObj,
 		Cur: curObj,
 	}
+	e.UpdateGlobalStatus()
 
 	for _, ctr := range ni.hpc.nodeRegisters {
 		go ctr.Receive(&e)
 	}
 }
 
-func (ni *NodeInformer) ProcessAddEvent(node *v1.Node) {
-	//log.Printf("Node name {%s}, Node Status {%s} ", node.Name, node.Status.Addresses )
-	log.Printf("%s", node.Status.Addresses[0].Type)
-	log.Printf("%s", node.Status.Addresses[0].Address)
-	//log.Printf("%s",node
-}
-
-func (ni *NodeInformer) ProcessDeleteEvent(node *v1.Node) {
-
-}
-
-func (ni *NodeInformer) ProcessUpdateEvent(node *v1.Node, node2 *v1.Node) {
-
-}
+//func (ni *NodeInformer) ProcessAddEvent(node *v1.Node) {
+//	//log.Printf("Node name {%s}, Node Status {%s} ", node.Name, node.Status.Addresses )
+//	log.Printf("%s", node.Status.Addresses[0].Type)
+//	log.Printf("%s", node.Status.Addresses[0].Address)
+//	//log.Printf("%s",node
+//}
+//
+//func (ni *NodeInformer) ProcessDeleteEvent(node *v1.Node) {
+//
+//}
+//
+//func (ni *NodeInformer) ProcessUpdateEvent(node *v1.Node, node2 *v1.Node) {
+//
+//}

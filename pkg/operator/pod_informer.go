@@ -1,7 +1,6 @@
 package operator
 
 import (
-	"github.com/emicklei/go-restful/log"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
@@ -54,7 +53,6 @@ func InitPodInformer(kclient *kubernetes.Clientset, opts map[string]string, hpc 
 func (pi *PodInformer) onAdd(cur1 interface{}) {
 	podObj := cur1.(*v1.Pod)
 
-	go pi.ProcessAddEvent(podObj)
 	e := PodEvent{
 		ResourceEvent: ResourceEvent{
 			Event_type: ADD,
@@ -62,6 +60,7 @@ func (pi *PodInformer) onAdd(cur1 interface{}) {
 		Cur: podObj,
 		Old: nil,
 	}
+	e.UpdateGlobalStatus()
 
 	for _, ctr := range pi.hpc.podRegisters {
 		go ctr.Receive(&e)
@@ -71,7 +70,6 @@ func (pi *PodInformer) onAdd(cur1 interface{}) {
 func (pi *PodInformer) onDelete(cur interface{}) {
 	podObj := cur.(*v1.Pod)
 
-	go pi.ProcessDeleteEvent(podObj)
 	e := PodEvent{
 		ResourceEvent: ResourceEvent{
 			Event_type: DELETE,
@@ -79,6 +77,8 @@ func (pi *PodInformer) onDelete(cur interface{}) {
 		Cur: podObj,
 		Old: nil,
 	}
+	e.UpdateGlobalStatus()
+
 	for _, ctr := range pi.hpc.podRegisters {
 		go ctr.Receive(&e)
 	}
@@ -88,7 +88,6 @@ func (pi *PodInformer) onDelete(cur interface{}) {
 func (pi *PodInformer) onUpdate(old, cur interface{}) {
 	oldObj := old.(*v1.Pod)
 	curObj := cur.(*v1.Pod)
-	go pi.ProcessUpdateEvent(oldObj, curObj)
 
 	e := PodEvent{
 		ResourceEvent: ResourceEvent{
@@ -97,22 +96,23 @@ func (pi *PodInformer) onUpdate(old, cur interface{}) {
 		Old: oldObj,
 		Cur: curObj,
 	}
+	e.UpdateGlobalStatus()
 
 	for _, ctr := range pi.hpc.podRegisters {
 		go ctr.Receive(&e)
 	}
 }
 
-func (pi *PodInformer) ProcessAddEvent(podobj *v1.Pod) {
-	log.Printf("Pod name {%s}, Pod Status {%s}, Node Name {%s} ",
-		podobj.Name, podobj.Status.Phase, podobj.Spec.NodeName)
-
-}
-
-func (pi *PodInformer) ProcessDeleteEvent(podobj *v1.Pod) {
-
-}
-
-func (pi *PodInformer) ProcessUpdateEvent(oldobj, curobj *v1.Pod) {
-
-}
+//func (pi *PodInformer) ProcessAddEvent(podobj *v1.Pod) {
+//	log.Printf("Pod name {%s}, Pod Status {%s}, Node Name {%s} ",
+//		podobj.Name, podobj.Status.Phase, podobj.Spec.NodeName)
+//
+//}
+//
+//func (pi *PodInformer) ProcessDeleteEvent(podobj *v1.Pod) {
+//
+//}
+//
+//func (pi *PodInformer) ProcessUpdateEvent(oldobj, curobj *v1.Pod) {
+//
+//}

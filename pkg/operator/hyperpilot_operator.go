@@ -4,7 +4,12 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"log"
 	"sync"
+
+	"database/sql"
+	_ "github.com/proullon/ramsql/driver"
 )
+
+const K8SEVENT = "K8SEVENT"
 
 // HyperpilotOpertor watches the kubernetes api for changes to Pods and
 // delete completed Pods without specific annotation
@@ -24,7 +29,7 @@ type HyperpilotOpertor struct {
 	nodeRegisters      []BaseController
 
 	// pod and node mapping
-
+	db *sql.DB
 }
 
 func (opertor *HyperpilotOpertor) GetWorld() {
@@ -46,6 +51,24 @@ func NewHyperpilotOperator(kclient *kubernetes.Clientset, opts map[string]string
 	hpc.deployInformer = InitDeploymentInformer(kclient, opts, hpc)
 	hpc.daemonSetInformer = InitDaemonSetInformer(kclient, opts, hpc)
 	hpc.nodeInformer = InitNodeInformer(kclient, opts, hpc)
+
+	db, err := sql.Open("ramsql", K8SEVENT)
+	if err != nil {
+		log.Fatalf("sql.Open : Error : %s\n", err)
+	}
+
+	batch := []string{
+		`CREATE TABLE node ( name TEXT PRIMARY KEY, internal_ip TEXT, external_ip TEXT);`,
+		`CREATE TABLE pod ( name TEXT PRIMARY KEY, status TEXT,  node TEXT);`,
+	}
+	hpc.db = db
+
+	for _, b := range batch {
+		_, err = hpc.db.Exec(b)
+		if err != nil {
+			log.Fatalf("sql.Exec: Error: %s\n", err)
+		}
+	}
 	return hpc
 }
 

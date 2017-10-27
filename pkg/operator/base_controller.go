@@ -1,5 +1,7 @@
 package operator
 
+import "database/sql"
+
 type ResourceEnum int
 
 const (
@@ -20,5 +22,6 @@ type BaseController interface {
 	Close()
 }
 
-//type BaseController struct {
-//}
+type TaskController struct {
+	DB *sql.DB
+}

@@ -46,10 +46,7 @@ func main() {
 	hpc := operator.NewHyperpilotOperator(clientset, options)
 	snapController := operator.SnapTaskController{}
 
-	//hpc.GetWorld()
 	go hpc.Run(stop, wg)
-	// controller registered to operator after 20 sec.
-	// before update event happen, pod add event with running state is existing pod
 	snapController.Init()
 	snapController.Register(hpc, operator.POD|operator.NODE)
 
