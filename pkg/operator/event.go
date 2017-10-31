@@ -1,7 +1,6 @@
 package operator
 
 import (
-	"database/sql"
 	"k8s.io/client-go/pkg/api/v1"
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
 	"log"
@@ -21,7 +20,7 @@ type ResourceEvent struct {
 
 type Event interface {
 	GetType() EventType
-	UpdateGlobalStatus()
+	UpdateGlobalStatus(hpc *HyperpilotOpertor)
 }
 
 type NodeEvent struct {
@@ -30,35 +29,8 @@ type NodeEvent struct {
 	Old *v1.Node
 }
 
-func (r *NodeEvent) UpdateGlobalStatus() {
+func (r *NodeEvent) UpdateGlobalStatus(hpc *HyperpilotOpertor) {
 
-	db, err := sql.Open("ramsql", K8SEVENT)
-	defer db.Close()
-	if err != nil {
-		log.Fatalf("sql.Open : Error : %s\n", err)
-	}
-	if r.Event_type == ADD {
-		stmt, err := db.Prepare("INSERT INTO node(name, internal_ip,external_ip) VALUES(?,?,?)")
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		_, err = stmt.Exec(r.Cur.Name, r.Cur.Status.Addresses[0].Address, r.Cur.Status.Addresses[1].Address)
-
-		if err != nil {
-			log.Fatal(err)
-		}
-		log.Printf("Insert Node {%s}, INTERNAL_IP {%s}, EXTERNAL_IP {%s}. ",
-			r.Cur.Name, r.Cur.Status.Addresses[0].Address, r.Cur.Status.Addresses[1].Address)
-	}
-
-	//TODO
-	if r.Event_type == UPDATE {
-	}
-
-	//TODO
-	if r.Event_type == DELETE {
-	}
 }
 
 func (r *NodeEvent) GetType() EventType {
@@ -71,59 +43,23 @@ type PodEvent struct {
 	Old *v1.Pod
 }
 
-func (r *PodEvent) UpdateGlobalStatus() {
-	db, err := sql.Open("ramsql", K8SEVENT)
-	defer db.Close()
-	if err != nil {
-		log.Fatalf("sql.Open : Error : %s\n", err)
-	}
-
-	// ADD event with running means the pod already run before operator
-	if r.Event_type == ADD && r.Cur.Status.Phase == "Running" {
-		stmt, err := db.Prepare("INSERT INTO pod(name, status, node) VALUES(?,?,?)")
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		_, err = stmt.Exec(r.Cur.Name, r.Cur.Status.Phase, r.Cur.Spec.NodeName)
-
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		log.Printf("Insert Existing Pod {%s}, Status {%s}, node {%s}. ",
-			r.Cur.Name, r.Cur.Status.Phase, r.Cur.Spec.NodeName)
-	}
-
+func (r *PodEvent) UpdateGlobalStatus(hpc *HyperpilotOpertor) {
 	//delete pod info when delete event happens
 	if r.Event_type == DELETE {
-		stmt, err := db.Prepare("DELETE from pod where name = ?")
-		if err != nil {
-			log.Fatal(err)
-		}
-		_, err = stmt.Exec(r.Cur.Name)
-		if err != nil {
-			log.Fatal(err)
-		}
-		log.Printf("Delete Pod {%s}", r.Cur.Name)
+		delete(hpc.pods, r.Cur.Name)
+		log.Printf("[ operator ] Delete Pod {%s}", r.Cur.Name)
 	}
 
 	// node info is available until pod is in running state
 	if r.Event_type == UPDATE {
 		if r.Old.Status.Phase == "Pending" && r.Cur.Status.Phase == "Running" {
-			stmt, err := db.Prepare("INSERT INTO pod(name, status, node) VALUES(?,?,?)")
-			if err != nil {
-				log.Fatal(err)
+			hpc.pods[r.Cur.Name] = PodInfo{
+				PodName: r.Cur.Name,
+				NodeId: r.Cur.Spec.NodeName,
+				PodIP: r.Cur.Status.PodIP,
 			}
 
-			_, err = stmt.Exec(r.Cur.Name, r.Cur.Status.Phase, r.Cur.Spec.NodeName)
-
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			log.Printf("Insert NEW Pod {%s}, Status {%s}, node {%s}. ",
-				r.Cur.Name, r.Cur.Status.Phase, r.Cur.Spec.NodeName)
+			log.Printf("[ operator ] Insert NEW Pod {%s}", hpc.pods[r.Cur.Name])
 		}
 	}
 }
@@ -142,7 +78,7 @@ func (r *DeploymentEvent) GetType() EventType {
 	return r.Event_type
 }
 
-func (r *DeploymentEvent) UpdateGlobalStatus() {
+func (r *DeploymentEvent) UpdateGlobalStatus(hpc *HyperpilotOpertor) {
 	//TODO
 	if r.Event_type == ADD {
 	}
@@ -167,7 +103,8 @@ func (r *DaemonSetEvent) GetType() EventType {
 	return r.Event_type
 }
 
-func (r *DaemonSetEvent) UpdateGlobalStatus() {
+func (r *DaemonSetEvent) UpdateGlobalStatus(hpc *HyperpilotOpertor) {
+
 	//TODO
 	if r.Event_type == ADD {
 	}

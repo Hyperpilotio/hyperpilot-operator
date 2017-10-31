@@ -43,12 +43,12 @@ func main() {
 	log.Printf("Configured namespace: '%s'", options["namespace"])
 	log.Printf("Starting operator...")
 
-	hpc := operator.NewHyperpilotOperator(clientset, options)
-	snapController := operator.SnapTaskController{}
+	controllers := []operator.BaseController{}
+	controllers = append(controllers, operator.NewSnapTaskController())
+	hpc := operator.NewHyperpilotOperator(clientset, controllers)
 
 	go hpc.Run(stop, wg)
-	snapController.Init()
-	snapController.Register(hpc, operator.POD|operator.NODE)
+
 
 	<-sigs // Wait for signals (this hangs until a signal arrives)
 	log.Printf("Shutting down...")

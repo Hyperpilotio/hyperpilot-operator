@@ -1,6 +1,5 @@
 package operator
 
-import "database/sql"
 
 type ResourceEnum int
 
@@ -16,12 +15,11 @@ func (this ResourceEnum) IsRegister(flag ResourceEnum) bool {
 }
 
 type BaseController interface {
-	Init()
-	Register(hpc *HyperpilotOpertor, res ResourceEnum)
+	Init(opertor *HyperpilotOpertor) error
 	Receive(e Event)
+	GetResourceEnum() ResourceEnum
 	Close()
 }
 
 type TaskController struct {
-	DB *sql.DB
 }

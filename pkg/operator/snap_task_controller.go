@@ -1,64 +1,158 @@
 package operator
 
 import (
-	"database/sql"
 	"fmt"
 	"log"
+	"strings"
+	"github.com/hyperpilotio/hyperpilot-operator/pkg/snap"
 )
+
+
+type SnapNodeInfo struct {
+	NodeId string
+	SnapClient *snap.SnapClient
+
+	// servicePodName <-> Task name
+	SnapTasks map[string]string
+
+	// servicePodName <-> nul
+	RunningServicePods map[string]struct{}
+}
 
 type SnapTaskController struct {
 	TaskController
+
+	ServiceList []string
+	Nodes map[string]SnapNodeInfo
+}
+
+func NewSnapTaskController() BaseController {
+	return &SnapTaskController{
+		ServiceList: []string{
+			"resource-worker",
+		},
+		Nodes: map[string]SnapNodeInfo{},
+	}
+}
+
+func (s *SnapTaskController) GetResourceEnum() ResourceEnum {
+	//return POD | NODE | DAEMONSET
+	return POD | NODE
 }
 
 func (s *SnapTaskController) Close() {
 
 }
 
-func (s *SnapTaskController) Register(hpc *HyperpilotOpertor, res ResourceEnum) {
-	hpc.Accept(s, res)
+//for each node {
+// Compare node.SnapTasks and RunningServicePods
+// If any pod in runningServicePods doesn't exist in SnapTasks value,
+// Create a new snap task for that new pod
+// If any tasks in SnapTasks points to a pod not in the running service pods list,
+// Delete the task from that snap.
+//}
+func (s *SnapTaskController) reconcileSnapState() {
+
+	// Check each node
+	for _, node := range  s.Nodes{
+		//If any pod in runningServicePods doesn't exist in SnapTasks value,
+		// Create a new snap task for that new pod
+		for servicePodName :=range node.RunningServicePods {
+			_, ok := node.SnapTasks[servicePodName]
+
+			if !ok {
+				task := node.SnapClient.CreateSnapTask()
+				node.SnapClient.RunTask(task)
+				node.SnapTasks[servicePodName] = task.Name
+			}
+		}
+
+		// If any tasks in SnapTasks points to a pod not in the running service pods list,
+		// Delete the task from that snap.
+		for servicePodName, taskName := range node.SnapTasks{
+			_, ok := node.RunningServicePods[servicePodName]
+			if !ok {
+				node.SnapClient.DeleteTask(taskName)
+				delete(node.SnapTasks, servicePodName)
+			}
+		}
+	}
 }
 
-func (s *SnapTaskController) Init() {
-	//setup RAM SQL access permission from operator
-	d, err := sql.Open("ramsql", K8SEVENT)
-	if err != nil {
-		log.Fatalf("sql.Open : Error : %s\n", err)
+func (s *SnapTaskController) Init(opertor *HyperpilotOpertor) error {
+
+	// Initialize steps:
+	// 1. Get all snap pods for each node, and create SnapClient for each snap
+	for _, p := range opertor.pods {
+		if strings.HasPrefix(p.PodName, "snap-"){
+			s.Nodes[p.NodeId] = SnapNodeInfo{
+				NodeId: p.NodeId,
+				SnapClient: snap.NewSnapClient(p.PodName),
+				RunningServicePods: make(map[string]struct{}),
+				SnapTasks: make(map[string]string),
+			}
+		}
 	}
-	s.DB = d
+
+	// 2. Get all running tasks from Snap API
+	for _, node := range s.Nodes {
+		tasks, err := node.SnapClient.GetAllTasks()
+
+		if err != nil{
+			// Check error
+		}
+		for _, task := range tasks {
+			// Naming snap tasks bsased on service pod name, e.g: s1-task
+			servicePodName := s.getServicePodNameFromSnapTask(task.Name)
+			node.SnapTasks[servicePodName] = task.Name
+		}
+	}
+
+	// 3. Get all running service pods
+	for _, service := range s.ServiceList {
+		for _, p := range opertor.pods{
+			if strings.HasPrefix(p.PodName, service){
+				s.Nodes[p.NodeId].RunningServicePods[p.PodName] = struct {}{}
+			}
+		}
+	}
+
+	return nil
+}
+
+func (s *SnapTaskController) getServicePodNameFromSnapTask(taskname string) string {
+	return strings.Split(taskname, "-")[0]
 }
 
 func (s *SnapTaskController) Receive(e Event) {
 
 	_, ok := e.(*PodEvent)
 	if ok {
-		ProcessPod(e.(*PodEvent))
+		s.ProcessPod(e.(*PodEvent))
 	}
 
 	_, ok = e.(*DeploymentEvent)
 	if ok {
-		ProcessDeployment(e.(*DeploymentEvent))
+		s.ProcessDeployment(e.(*DeploymentEvent))
 	}
 
 	_, ok = e.(*DaemonSetEvent)
 	if ok {
-		ProcessDaemonSet(e.(*DaemonSetEvent))
+		s.ProcessDaemonSet(e.(*DaemonSetEvent))
 	}
 
 	_, ok = e.(*NodeEvent)
 	if ok {
-		ProcessNode(e.(*NodeEvent))
+		s.ProcessNode(e.(*NodeEvent))
 	}
 
 }
 
-func ProcessNode(e *NodeEvent) {
+func (s *SnapTaskController)ProcessNode(e *NodeEvent) {
 	switch e.Event_type {
 	case ADD:
-		log.Printf("do node add work")
 	case DELETE:
-		log.Printf("do node delete work")
 	case UPDATE:
-		log.Printf("do node update work")
 	}
 }
 
@@ -66,35 +160,91 @@ func (s *SnapTaskController) String() string {
 	return fmt.Sprintf("SnapTaskController")
 }
 
-func ProcessPod(e *PodEvent) {
+func (s *SnapTaskController) ProcessPod(e *PodEvent) {
+	nodeInfo := s.Nodes[e.Cur.Spec.NodeName]
+
 	switch e.Event_type {
 	case ADD:
-		log.Printf("do pod add work")
 	case DELETE:
-		log.Printf("do pod delete work")
+		// delete pod from nodeInfo.RunningServicePods
+		for _, service := range s.ServiceList {
+			if strings.HasPrefix(e.Cur.Name, service) {
+				delete(nodeInfo.RunningServicePods, e.Cur.Name)
+				s.reconcileSnapState()
+				log.Printf("[ Controller ] Delete Pod {%s}", e.Cur.Name)
+			}
+		}
+
+
 	case UPDATE:
-		log.Printf("do pod update work")
+		// Only check scheduled pods
+		if e.Old.Status.Phase == "Pending" && e.Cur.Status.Phase == "Running" {
+			// Check if it's running and is part of a service we're looking for
+			for _, service := range s.ServiceList {
+				if strings.HasPrefix(e.Cur.Name, service) {
+					nodeInfo.RunningServicePods[e.Cur.Name] = struct {}{}
+					s.reconcileSnapState()
+					log.Printf("[ Controller ] Insert Pod {%s}", e.Cur.Name)
+					return
+				}
+			}
+
+			// If this is a snap pod, we need to update the snap client to point to the new Snap
+			if strings.HasPrefix(e.Cur.Name, "snap-") {
+				nodeInfo.SnapClient = snap.NewSnapClient(e.Cur.Name)
+				nodeInfo.SnapTasks = map[string]string{}
+				log.Printf("[ Controller ] Found Snap Pod {%s}", e.Cur.Name)
+				s.reconcileSnapState()
+				return
+			}
+
+			// Todo: snap is not running  when controller start
+
+
+
+		}
 	}
 }
 
-func ProcessDeployment(e *DeploymentEvent) {
+func (s *SnapTaskController)ProcessDeployment(e *DeploymentEvent) {
 	switch e.Event_type {
 	case ADD:
-		log.Printf("do deploy add work")
 	case DELETE:
-		log.Printf("do deploy delete work")
 	case UPDATE:
-		log.Printf("do deploy update work")
 	}
 }
 
-func ProcessDaemonSet(e *DaemonSetEvent) {
+func (s *SnapTaskController)ProcessDaemonSet(e *DaemonSetEvent) {
 	switch e.Event_type {
 	case ADD:
-		log.Printf("do daemonset add work")
 	case DELETE:
-		log.Printf("do daemonset delete work")
 	case UPDATE:
-		log.Printf("do daemonset update work")
 	}
+}
+
+func(s *SnapTaskController)PrintOut(){
+
+	log.Printf("================================")
+	for k,v := range s.Nodes {
+		log.Printf("Controller info: {NodeName, Info}: {%s, %s}", k, v)
+	}
+
+	for _, node := range s.Nodes{
+		taskInNode := make([]string, 0,0)
+
+		for _, task := range node.SnapTasks {
+			taskInNode = append(taskInNode, task)
+		}
+		log.Printf("Controller info: {node, task}: {%s, %s}", node.NodeId, taskInNode)
+	}
+
+	for _, node:= range s.Nodes{
+		serviceInNode := make([]string, 0,0)
+		for k, _ := range node.RunningServicePods{
+			serviceInNode = append(serviceInNode, k)
+		}
+		log.Printf("Controller info : {node, runningPod}: {%s, %s}", node.NodeId, serviceInNode)
+	}
+	log.Printf("================================")
+
 }

@@ -8,25 +8,31 @@ import (
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
 	"k8s.io/client-go/tools/cache"
 	"time"
+	"sync"
 )
 
 type DeploymentInformer struct {
 	indexInformer cache.SharedIndexInformer
 	hpc           *HyperpilotOpertor
+	mutex sync.Mutex
+	queuedEvents []*DeploymentEvent
+	initializing bool
 }
 
-func InitDeploymentInformer(kclient *kubernetes.Clientset, opts map[string]string, hpc *HyperpilotOpertor) DeploymentInformer {
-	di := DeploymentInformer{
+func InitDeploymentInformer(kclient *kubernetes.Clientset,  hpc *HyperpilotOpertor) *DeploymentInformer {
+	di := &DeploymentInformer{
 		hpc: hpc,
+		queuedEvents: []*DeploymentEvent{},
+		initializing: true,
 	}
 
 	di.indexInformer = cache.NewSharedIndexInformer(
 		&cache.ListWatch{
 			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-				return kclient.ExtensionsV1beta1Client.Deployments(opts["namespace"]).List(options)
+				return kclient.ExtensionsV1beta1Client.Deployments(HYPERPILOT_OPERATOR_NS).List(options)
 			},
 			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-				return kclient.ExtensionsV1beta1Client.Deployments(opts["namespace"]).Watch(options)
+				return kclient.ExtensionsV1beta1Client.Deployments(HYPERPILOT_OPERATOR_NS).Watch(options)
 			},
 		},
 		&v1beta1.Deployment{},
@@ -49,10 +55,31 @@ func InitDeploymentInformer(kclient *kubernetes.Clientset, opts map[string]strin
 	return di
 }
 
+
+func (d *DeploymentInformer) onOperatorReady(){
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+
+	if len(d.queuedEvents) > 0 {
+
+		for _, e := range d.queuedEvents {
+			e.UpdateGlobalStatus(d.hpc)
+
+			for _, ctr := range d.hpc.deployRegisters {
+				go ctr.Receive(e)
+			}
+		}
+	}
+	// Clear queued events queue
+	d.queuedEvents = d.queuedEvents[:0]
+
+	d.initializing = false
+}
+
 func (d *DeploymentInformer) onAdd(i interface{}) {
 	deployObj := i.(*v1beta1.Deployment)
 
-	e := DeploymentEvent{
+	e := &DeploymentEvent{
 		ResourceEvent: ResourceEvent{
 			Event_type: ADD,
 		},
@@ -60,9 +87,17 @@ func (d *DeploymentInformer) onAdd(i interface{}) {
 		Old: nil,
 	}
 
-	e.UpdateGlobalStatus()
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+	if d.initializing {
+		d.queuedEvents = append(d.queuedEvents, e)
+		return
+	}
+
+	e.UpdateGlobalStatus(d.hpc)
+
 	for _, ctr := range d.hpc.deployRegisters {
-		go ctr.Receive(&e)
+		go ctr.Receive(e)
 	}
 }
 
@@ -70,7 +105,7 @@ func (d *DeploymentInformer) onUpdate(i1 interface{}, i2 interface{}) {
 	old := i1.(*v1beta1.Deployment)
 	cur := i2.(*v1beta1.Deployment)
 
-	e := DeploymentEvent{
+	e := &DeploymentEvent{
 		ResourceEvent: ResourceEvent{
 			Event_type: UPDATE,
 		},
@@ -78,10 +113,16 @@ func (d *DeploymentInformer) onUpdate(i1 interface{}, i2 interface{}) {
 		Old: old,
 	}
 
-	e.UpdateGlobalStatus()
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+	if d.initializing {
+		d.queuedEvents = append(d.queuedEvents, e)
+		return
+	}
+	e.UpdateGlobalStatus(d.hpc)
 
 	for _, ctr := range d.hpc.deployRegisters {
-		go ctr.Receive(&e)
+		go ctr.Receive(e)
 	}
 
 }
@@ -89,7 +130,7 @@ func (d *DeploymentInformer) onUpdate(i1 interface{}, i2 interface{}) {
 func (d *DeploymentInformer) onDelete(cur interface{}) {
 	deployObj := cur.(*v1beta1.Deployment)
 
-	e := DeploymentEvent{
+	e := &DeploymentEvent{
 		ResourceEvent: ResourceEvent{
 			Event_type: DELETE,
 		},
@@ -97,10 +138,16 @@ func (d *DeploymentInformer) onDelete(cur interface{}) {
 		Old: nil,
 	}
 
-	e.UpdateGlobalStatus()
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+	if d.initializing {
+		d.queuedEvents = append(d.queuedEvents, e)
+		return
+	}
+	e.UpdateGlobalStatus(d.hpc)
 
 	for _, ctr := range d.hpc.deployRegisters {
-		go ctr.Receive(&e)
+		go ctr.Receive(e)
 	}
 
 }

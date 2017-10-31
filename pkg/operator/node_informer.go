@@ -8,16 +8,22 @@ import (
 	"k8s.io/client-go/pkg/api/v1"
 	"k8s.io/client-go/tools/cache"
 	"time"
+	"sync"
 )
 
 type NodeInformer struct {
 	indexInformer cache.SharedIndexInformer
 	hpc           *HyperpilotOpertor
+	mutex sync.Mutex
+	queuedEvents []*NodeEvent
+	initializing bool
 }
 
-func InitNodeInformer(kclient *kubernetes.Clientset, opts map[string]string, hpc *HyperpilotOpertor) NodeInformer {
-	ni := NodeInformer{
+func InitNodeInformer(kclient *kubernetes.Clientset,  hpc *HyperpilotOpertor) *NodeInformer {
+	ni := &NodeInformer{
 		hpc: hpc,
+		queuedEvents: []*NodeEvent{},
+		initializing: true,
 	}
 
 	// Create informer for watching node
@@ -50,10 +56,31 @@ func InitNodeInformer(kclient *kubernetes.Clientset, opts map[string]string, hpc
 
 }
 
+func (ni *NodeInformer) onOperatorReady(){
+	ni.mutex.Lock()
+	defer ni.mutex.Unlock()
+
+	if len(ni.queuedEvents) > 0 {
+
+		for _, e := range ni.queuedEvents {
+
+			e.UpdateGlobalStatus(ni.hpc)
+
+			for _, ctr := range ni.hpc.nodeRegisters {
+				go ctr.Receive(e)
+			}
+		}
+	}
+	// Clear queued events queue
+	ni.queuedEvents = ni.queuedEvents[:0]
+
+	ni.initializing = false
+}
+
 func (ni *NodeInformer) onAdd(cur1 interface{}) {
 	nodeObj := cur1.(*v1.Node)
 
-	e := NodeEvent{
+	e := &NodeEvent{
 		ResourceEvent: ResourceEvent{
 			Event_type: ADD,
 		},
@@ -61,27 +88,39 @@ func (ni *NodeInformer) onAdd(cur1 interface{}) {
 		Old: nil,
 	}
 
-	e.UpdateGlobalStatus()
+	ni.mutex.Lock()
+	defer ni.mutex.Unlock()
+	if ni.initializing {
+		ni.queuedEvents = append(ni.queuedEvents, e)
+		return
+	}
 
+	e.UpdateGlobalStatus(ni.hpc)
 	for _, ctr := range ni.hpc.nodeRegisters {
-		go ctr.Receive(&e)
+		go ctr.Receive(e)
 	}
 }
 
 func (ni *NodeInformer) onDelete(cur1 interface{}) {
 	nodeObj := cur1.(*v1.Node)
 
-	e := NodeEvent{
+	e := &NodeEvent{
 		ResourceEvent: ResourceEvent{
 			Event_type: DELETE,
 		},
 		Cur: nodeObj,
 		Old: nil,
 	}
-	e.UpdateGlobalStatus()
+	ni.mutex.Lock()
+	defer ni.mutex.Unlock()
+	if ni.initializing {
+		ni.queuedEvents = append(ni.queuedEvents, e)
+		return
+	}
 
+	e.UpdateGlobalStatus(ni.hpc)
 	for _, ctr := range ni.hpc.nodeRegisters {
-		go ctr.Receive(&e)
+		go ctr.Receive(e)
 	}
 }
 
@@ -89,31 +128,22 @@ func (ni *NodeInformer) onUpdate(old, cur interface{}) {
 	oldObj := old.(*v1.Node)
 	curObj := cur.(*v1.Node)
 
-	e := NodeEvent{
+	e := &NodeEvent{
 		ResourceEvent: ResourceEvent{
 			Event_type: UPDATE,
 		},
 		Old: oldObj,
 		Cur: curObj,
 	}
-	e.UpdateGlobalStatus()
+	ni.mutex.Lock()
+	defer ni.mutex.Unlock()
+	if ni.initializing {
+		ni.queuedEvents = append(ni.queuedEvents, e)
+		return
+	}
+	e.UpdateGlobalStatus(ni.hpc)
 
 	for _, ctr := range ni.hpc.nodeRegisters {
-		go ctr.Receive(&e)
+		go ctr.Receive(e)
 	}
 }
-
-//func (ni *NodeInformer) ProcessAddEvent(node *v1.Node) {
-//	//log.Printf("Node name {%s}, Node Status {%s} ", node.Name, node.Status.Addresses )
-//	log.Printf("%s", node.Status.Addresses[0].Type)
-//	log.Printf("%s", node.Status.Addresses[0].Address)
-//	//log.Printf("%s",node
-//}
-//
-//func (ni *NodeInformer) ProcessDeleteEvent(node *v1.Node) {
-//
-//}
-//
-//func (ni *NodeInformer) ProcessUpdateEvent(node *v1.Node, node2 *v1.Node) {
-//
-//}
