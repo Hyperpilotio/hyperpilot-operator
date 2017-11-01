@@ -1,23 +1,20 @@
 package operator
 
 import (
-	"k8s.io/client-go/kubernetes"
+	"database/sql"
 	"log"
 	"sync"
 
-	"database/sql"
-	_ "github.com/proullon/ramsql/driver"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
 //const K8SEVENT = "K8SEVENT"
 
 const (
 	HYPERPILOT_OPERATOR_NS = "hyperpilot"
-)
 
-const (
+	// Operator states
 	OPERATOR_INITIALIZING             = 0
 	OPERATOR_INITIALIZING_CONTROLLERS = 1
 	OPERATOR_RUNNING                  = 2
@@ -61,10 +58,6 @@ type HyperpilotOpertor struct {
 	state int
 }
 
-func (opertor *HyperpilotOpertor) GetWorld() {
-	//
-}
-
 // NewHyperpilotOperator creates a new NewHyperpilotOperator
 func NewHyperpilotOperator(kclient *kubernetes.Clientset, controllers []BaseController) *HyperpilotOpertor {
 	hpc := &HyperpilotOpertor{
@@ -92,13 +85,13 @@ func NewHyperpilotOperator(kclient *kubernetes.Clientset, controllers []BaseCont
 func (c *HyperpilotOpertor) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	// Lifecycle:
 	c.state = OPERATOR_INITIALIZING
+
 	// 1. Register informers
 	c.podInformer = InitPodInformer(c.kclient, c)
 	//c.deployInformer = InitDeploymentInformer(c.kclient, c)
 	//c.daemonSetInformer = InitDaemonSetInformer(c.kclient, c)
 	c.nodeInformer = InitNodeInformer(c.kclient, c)
 
-	// Execute go function
 	go c.podInformer.indexInformer.Run(stopCh)
 	//go c.deployInformer.indexInformer.Run(stopCh)
 	//go c.daemonSetInformer.indexInformer.Run(stopCh)

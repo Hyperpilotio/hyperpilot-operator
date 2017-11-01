@@ -1,4 +1,4 @@
-package: github.com/lwolf/kube-cleanup-operator
+package: github.com/hyperpilotio/hyperpilot-operator
 import:
 - package: k8s.io/apimachinery
   subpackages:
