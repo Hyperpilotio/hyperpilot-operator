@@ -8,21 +8,21 @@ import (
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
 	"k8s.io/client-go/tools/cache"
 
-	"time"
 	"sync"
+	"time"
 )
 
 type DaemonSetInformer struct {
 	indexInformer cache.SharedIndexInformer
 	hpc           *HyperpilotOpertor
-	mutex sync.Mutex
-	queuedEvents []*DaemonSetEvent
-	initializing bool
+	mutex         sync.Mutex
+	queuedEvents  []*DaemonSetEvent
+	initializing  bool
 }
 
-func InitDaemonSetInformer(kclient *kubernetes.Clientset,  hpc *HyperpilotOpertor) *DaemonSetInformer {
+func InitDaemonSetInformer(kclient *kubernetes.Clientset, hpc *HyperpilotOpertor) *DaemonSetInformer {
 	dsi := &DaemonSetInformer{
-		hpc: hpc,
+		hpc:          hpc,
 		queuedEvents: []*DaemonSetEvent{},
 		initializing: true,
 	}

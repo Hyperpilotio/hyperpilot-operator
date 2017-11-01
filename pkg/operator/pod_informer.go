@@ -15,14 +15,14 @@ import (
 type PodInformer struct {
 	indexInformer cache.SharedIndexInformer
 	hpc           *HyperpilotOpertor
-	mutex sync.Mutex
-	queuedEvents []*PodEvent
-	initializing bool
+	mutex         sync.Mutex
+	queuedEvents  []*PodEvent
+	initializing  bool
 }
 
 func InitPodInformer(kclient *kubernetes.Clientset, hpc *HyperpilotOpertor) *PodInformer {
 	pi := &PodInformer{
-		hpc: hpc,
+		hpc:          hpc,
 		queuedEvents: []*PodEvent{},
 		initializing: true,
 	}
@@ -151,4 +151,3 @@ func (pi *PodInformer) onUpdate(old, cur interface{}) {
 		go ctr.Receive(e)
 	}
 }
-

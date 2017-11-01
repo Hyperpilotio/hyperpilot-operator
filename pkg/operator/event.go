@@ -55,8 +55,8 @@ func (r *PodEvent) UpdateGlobalStatus(hpc *HyperpilotOpertor) {
 		if r.Old.Status.Phase == "Pending" && r.Cur.Status.Phase == "Running" {
 			hpc.pods[r.Cur.Name] = PodInfo{
 				PodName: r.Cur.Name,
-				NodeId: r.Cur.Spec.NodeName,
-				PodIP: r.Cur.Status.PodIP,
+				NodeId:  r.Cur.Spec.NodeName,
+				PodIP:   r.Cur.Status.PodIP,
 			}
 
 			log.Printf("[ operator ] Insert NEW Pod {%s}", hpc.pods[r.Cur.Name])

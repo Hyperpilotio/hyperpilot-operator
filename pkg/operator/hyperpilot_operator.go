@@ -9,33 +9,32 @@ import (
 	_ "github.com/proullon/ramsql/driver"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 )
 
 //const K8SEVENT = "K8SEVENT"
 
 const (
-	HYPERPILOT_OPERATOR_NS 	= "hyperpilot"
+	HYPERPILOT_OPERATOR_NS = "hyperpilot"
 )
 
 const (
-	OPERATOR_INITIALIZING = 0
+	OPERATOR_INITIALIZING             = 0
 	OPERATOR_INITIALIZING_CONTROLLERS = 1
-	OPERATOR_RUNNING = 2
+	OPERATOR_RUNNING                  = 2
 )
 
 type NodeInfo struct {
-	NodeName string
-	ExternalIP	string
-	InternalIP	string
+	NodeName   string
+	ExternalIP string
+	InternalIP string
 }
 
 type PodInfo struct {
-	PodName string
-	NodeId 	string
-	PodIP 	string
+	PodName  string
+	NodeId   string
+	PodIP    string
+	NodeName string
 }
-
 
 type HyperpilotOpertor struct {
 	podInformer       *PodInformer
@@ -56,9 +55,8 @@ type HyperpilotOpertor struct {
 	// pod and node mapping
 	db *sql.DB
 
-	nodes 				map[string]NodeInfo
-	pods 				map[string]PodInfo
-
+	nodes map[string]NodeInfo
+	pods  map[string]PodInfo
 
 	state int
 }
@@ -68,14 +66,14 @@ func (opertor *HyperpilotOpertor) GetWorld() {
 }
 
 // NewHyperpilotOperator creates a new NewHyperpilotOperator
-func NewHyperpilotOperator(kclient *kubernetes.Clientset,  controllers []BaseController) *HyperpilotOpertor {
+func NewHyperpilotOperator(kclient *kubernetes.Clientset, controllers []BaseController) *HyperpilotOpertor {
 	hpc := &HyperpilotOpertor{
 		podRegisters:       make([]BaseController, 0),
 		deployRegisters:    make([]BaseController, 0),
 		daemonSetRegisters: make([]BaseController, 0),
 		nsRegisters:        make([]BaseController, 0),
 		nodeRegisters:      make([]BaseController, 0),
-		controllers: 		controllers,
+		controllers:        controllers,
 		kclient:            kclient,
 
 		nodes: map[string]NodeInfo{},
@@ -106,9 +104,8 @@ func (c *HyperpilotOpertor) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	//go c.daemonSetInformer.indexInformer.Run(stopCh)
 	go c.nodeInformer.indexInformer.Run(stopCh)
 
-
 	// 2. Initialize kubernetes state use KubeAPI get pods, .......
-	nodes, _:=  c.kclient.Nodes().List(metav1.ListOptions{})
+	nodes, _ := c.kclient.Nodes().List(metav1.ListOptions{})
 
 	for _, n := range nodes.Items {
 		a := NodeInfo{
@@ -118,7 +115,7 @@ func (c *HyperpilotOpertor) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
 		}
 		c.nodes[a.NodeName] = a
 	}
-	for k, v := range c.nodes{
+	for k, v := range c.nodes {
 		log.Printf("{NodeName, Info}: {%s, %s}", k, v)
 	}
 
@@ -126,18 +123,17 @@ func (c *HyperpilotOpertor) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
 
 	for _, p := range pods.Items {
 		a := PodInfo{
-			PodName: p.Name,
-			NodeId: p.Spec.NodeName,
-			PodIP: p.Status.PodIP,
-
+			PodName:  p.Name,
+			NodeId:   p.Spec.NodeName,
+			PodIP:    p.Status.PodIP,
+			NodeName: p.Spec.NodeName,
 		}
 		c.pods[a.PodName] = a
 	}
 
-	for k,v := range c.pods{
+	for k, v := range c.pods {
 		log.Printf("{PodName, Info}: {%s, %s}", k, v)
 	}
-
 
 	// 3. Initialize controllers
 	c.state = OPERATOR_INITIALIZING_CONTROLLERS
@@ -153,14 +149,12 @@ func (c *HyperpilotOpertor) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	controllerWg.Wait()
 	// Use wait group to wait for all controller init to finish
 
-
 	// 3. Forward events to controllers
 	c.state = OPERATOR_RUNNING
 	c.podInformer.onOperatorReady()
 	//c.deployInformer.onOperatorReady()
 	//c.daemonSetInformer.onOperatorReady()
 	c.nodeInformer.onOperatorReady()
-
 
 	// When this function completes, mark the go function as done
 	defer wg.Done()

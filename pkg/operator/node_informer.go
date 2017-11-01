@@ -7,21 +7,21 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/api/v1"
 	"k8s.io/client-go/tools/cache"
-	"time"
 	"sync"
+	"time"
 )
 
 type NodeInformer struct {
 	indexInformer cache.SharedIndexInformer
 	hpc           *HyperpilotOpertor
-	mutex sync.Mutex
-	queuedEvents []*NodeEvent
-	initializing bool
+	mutex         sync.Mutex
+	queuedEvents  []*NodeEvent
+	initializing  bool
 }
 
-func InitNodeInformer(kclient *kubernetes.Clientset,  hpc *HyperpilotOpertor) *NodeInformer {
+func InitNodeInformer(kclient *kubernetes.Clientset, hpc *HyperpilotOpertor) *NodeInformer {
 	ni := &NodeInformer{
-		hpc: hpc,
+		hpc:          hpc,
 		queuedEvents: []*NodeEvent{},
 		initializing: true,
 	}
@@ -56,7 +56,7 @@ func InitNodeInformer(kclient *kubernetes.Clientset,  hpc *HyperpilotOpertor) *N
 
 }
 
-func (ni *NodeInformer) onOperatorReady(){
+func (ni *NodeInformer) onOperatorReady() {
 	ni.mutex.Lock()
 	defer ni.mutex.Unlock()
 

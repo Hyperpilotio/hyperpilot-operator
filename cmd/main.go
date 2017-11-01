@@ -49,7 +49,6 @@ func main() {
 
 	go hpc.Run(stop, wg)
 
-
 	<-sigs // Wait for signals (this hangs until a signal arrives)
 	log.Printf("Shutting down...")
 

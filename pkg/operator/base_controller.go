@@ -1,6 +1,5 @@
 package operator
 
-
 type ResourceEnum int
 
 const (

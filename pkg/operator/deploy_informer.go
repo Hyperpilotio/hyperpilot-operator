@@ -7,21 +7,21 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
 	"k8s.io/client-go/tools/cache"
-	"time"
 	"sync"
+	"time"
 )
 
 type DeploymentInformer struct {
 	indexInformer cache.SharedIndexInformer
 	hpc           *HyperpilotOpertor
-	mutex sync.Mutex
-	queuedEvents []*DeploymentEvent
-	initializing bool
+	mutex         sync.Mutex
+	queuedEvents  []*DeploymentEvent
+	initializing  bool
 }
 
-func InitDeploymentInformer(kclient *kubernetes.Clientset,  hpc *HyperpilotOpertor) *DeploymentInformer {
+func InitDeploymentInformer(kclient *kubernetes.Clientset, hpc *HyperpilotOpertor) *DeploymentInformer {
 	di := &DeploymentInformer{
-		hpc: hpc,
+		hpc:          hpc,
 		queuedEvents: []*DeploymentEvent{},
 		initializing: true,
 	}
@@ -55,8 +55,7 @@ func InitDeploymentInformer(kclient *kubernetes.Clientset,  hpc *HyperpilotOpert
 	return di
 }
 
-
-func (d *DeploymentInformer) onOperatorReady(){
+func (d *DeploymentInformer) onOperatorReady() {
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
 
