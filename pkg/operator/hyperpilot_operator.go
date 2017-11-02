@@ -1,7 +1,7 @@
 package operator
 
 import (
-	"database/sql"
+	"errors"
 	"log"
 	"sync"
 
@@ -15,6 +15,7 @@ const (
 	HYPERPILOT_OPERATOR_NS = "hyperpilot"
 
 	// Operator states
+	OPERATOR_NOT_RUNNING              = -1
 	OPERATOR_INITIALIZING             = 0
 	OPERATOR_INITIALIZING_CONTROLLERS = 1
 	OPERATOR_RUNNING                  = 2
@@ -49,8 +50,6 @@ type HyperpilotOpertor struct {
 	nodeRegisters      []BaseController
 
 	controllers []BaseController
-	// pod and node mapping
-	db *sql.DB
 
 	nodes map[string]NodeInfo
 	pods  map[string]PodInfo
@@ -68,9 +67,9 @@ func NewHyperpilotOperator(kclient *kubernetes.Clientset, controllers []BaseCont
 		nodeRegisters:      make([]BaseController, 0),
 		controllers:        controllers,
 		kclient:            kclient,
-
-		nodes: map[string]NodeInfo{},
-		pods:  map[string]PodInfo{},
+		nodes:              map[string]NodeInfo{},
+		pods:               map[string]PodInfo{},
+		state:              OPERATOR_NOT_RUNNING,
 	}
 
 	for _, controller := range controllers {
@@ -82,7 +81,7 @@ func NewHyperpilotOperator(kclient *kubernetes.Clientset, controllers []BaseCont
 }
 
 // Run starts the process for listening for pod changes and acting upon those changes.
-func (c *HyperpilotOpertor) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
+func (c *HyperpilotOpertor) Run(stopCh <-chan struct{}) error {
 	// Lifecycle:
 	c.state = OPERATOR_INITIALIZING
 
@@ -98,7 +97,10 @@ func (c *HyperpilotOpertor) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	go c.nodeInformer.indexInformer.Run(stopCh)
 
 	// 2. Initialize kubernetes state use KubeAPI get pods, .......
-	nodes, _ := c.kclient.Nodes().List(metav1.ListOptions{})
+	nodes, err := c.kclient.Nodes().List(metav1.ListOptions{})
+	if err != nil {
+		return errors.New("Unable to list nodes from kubernetes: " + err.Error())
+	}
 
 	for _, n := range nodes.Items {
 		a := NodeInfo{
@@ -108,11 +110,11 @@ func (c *HyperpilotOpertor) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
 		}
 		c.nodes[a.NodeName] = a
 	}
-	for k, v := range c.nodes {
-		log.Printf("{NodeName, Info}: {%s, %s}", k, v)
-	}
 
-	pods, _ := c.kclient.Pods(HYPERPILOT_OPERATOR_NS).List(metav1.ListOptions{})
+	pods, err := c.kclient.Pods(HYPERPILOT_OPERATOR_NS).List(metav1.ListOptions{})
+	if err != nil {
+		return errors.New("Unable to list pods from kubernetes")
+	}
 
 	for _, p := range pods.Items {
 		a := PodInfo{
@@ -124,12 +126,9 @@ func (c *HyperpilotOpertor) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
 		c.pods[a.PodName] = a
 	}
 
-	for k, v := range c.pods {
-		log.Printf("{PodName, Info}: {%s, %s}", k, v)
-	}
-
 	// 3. Initialize controllers
 	c.state = OPERATOR_INITIALIZING_CONTROLLERS
+
 	controllerWg := &sync.WaitGroup{}
 	for _, controller := range c.controllers {
 		controllerWg.Add(1)
@@ -144,39 +143,38 @@ func (c *HyperpilotOpertor) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
 
 	// 3. Forward events to controllers
 	c.state = OPERATOR_RUNNING
+
 	c.podInformer.onOperatorReady()
 	//c.deployInformer.onOperatorReady()
 	//c.daemonSetInformer.onOperatorReady()
 	c.nodeInformer.onOperatorReady()
 
-	// When this function completes, mark the go function as done
-	defer wg.Done()
-	// Increment wait group as we're about to execute a go function
-	wg.Add(1)
 	// Wait till we receive a stop signal
 	<-stopCh
+
+	return nil
 }
 
 func (c *HyperpilotOpertor) Accept(s BaseController, res ResourceEnum) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if res.IsRegister(POD) {
+	if res.IsRegistered(POD) {
 		c.podRegisters = append(c.podRegisters, s)
 		log.Printf("Contoller {%s} registered resource POD", s)
 	}
 
-	if res.IsRegister(DEPLOYMENT) {
+	if res.IsRegistered(DEPLOYMENT) {
 		c.deployRegisters = append(c.deployRegisters, s)
 		log.Printf("Contoller {%s} registered resource DEPLOYMENT", s)
 	}
 
-	if res.IsRegister(DAEMONSET) {
+	if res.IsRegistered(DAEMONSET) {
 		c.daemonSetRegisters = append(c.daemonSetRegisters, s)
 		log.Printf("Contoller {%s} registered resource DAEMONSET", s)
 	}
 
-	if res.IsRegister(NODE) {
+	if res.IsRegistered(NODE) {
 		c.nodeRegisters = append(c.nodeRegisters, s)
 		log.Printf("Contoller {%s} registered resource NODE", s)
 	}

@@ -9,7 +9,7 @@ const (
 	NODE       ResourceEnum = 8
 )
 
-func (this ResourceEnum) IsRegister(flag ResourceEnum) bool {
+func (this ResourceEnum) IsRegistered(flag ResourceEnum) bool {
 	return this|flag == this
 }
 

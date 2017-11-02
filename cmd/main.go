@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"sync"
 	"syscall"
 
 	"github.com/hyperpilotio/hyperpilot-operator/pkg/operator"
@@ -22,38 +21,37 @@ func main() {
 	stop := make(chan struct{})     // Create channel to receive stop signal
 
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM, syscall.SIGINT) // Register the sigs channel to receieve SIGTERM
-
-	wg := &sync.WaitGroup{} // Goroutines can add themselves to this to be waited on so that they finish
-
 	runOutsideCluster := flag.Bool("run-outside-cluster", false, "Set this flag when running outside of the cluster.")
-	namespace := flag.String("namespace", "", "Watch only this namespaces")
+
 	flag.Parse()
 
 	// Create clientset for interacting with the kubernetes cluster
 	clientset, err := newClientSet(*runOutsideCluster)
-
 	if err != nil {
-		panic(err.Error())
+		log.Fatalf("Unable to create clientset: %s", err.Error())
 	}
 
-	options := map[string]string{
-		"namespace": *namespace,
-	}
-
-	log.Printf("Configured namespace: '%s'", options["namespace"])
 	log.Printf("Starting operator...")
 
 	controllers := []operator.BaseController{}
 	controllers = append(controllers, operator.NewSnapTaskController())
 	hpc := operator.NewHyperpilotOperator(clientset, controllers)
 
-	go hpc.Run(stop, wg)
+	go func() {
+		err := hpc.Run(stop)
+		if err != nil {
+			log.Printf("Operator failed to run: " + err.Error())
+			close(sigs)
+		}
+	}()
 
-	<-sigs // Wait for signals (this hangs until a signal arrives)
-	log.Printf("Shutting down...")
+	// Wait for signal or error from operator
+	<-sigs
 
-	close(stop) // Tell goroutines to stop themselves
-	wg.Wait()   // Wait for all to be stopped
+	// Signal all goroutines in operator to exit
+	close(stop)
+
+	log.Printf("Hyperpilot operator exiting")
 }
 
 func newClientSet(runOutsideCluster bool) (*kubernetes.Clientset, error) {
