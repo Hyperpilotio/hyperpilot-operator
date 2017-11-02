@@ -1,6 +1,7 @@
 package operator
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -10,7 +11,7 @@ import (
 
 type SnapNodeInfo struct {
 	NodeId     string
-	SnapClient *snap.SnapClient
+	SnapClient *snap.TaskManager
 
 	// servicePodName <-> Task name
 	SnapTasks map[string]string
@@ -59,8 +60,8 @@ func (s *SnapTaskController) reconcileSnapState() {
 			_, ok := node.SnapTasks[servicePodName]
 
 			if !ok {
-				task := node.SnapClient.CreateSnapTask()
-				node.SnapClient.RunTask(task)
+				task := snap.NewTask(servicePodName)
+				node.SnapClient.CreateTask(task)
 				node.SnapTasks[servicePodName] = task.Name
 			}
 		}
@@ -70,30 +71,32 @@ func (s *SnapTaskController) reconcileSnapState() {
 		for servicePodName, taskName := range node.SnapTasks {
 			_, ok := node.RunningServicePods[servicePodName]
 			if !ok {
-				node.SnapClient.DeleteTask(taskName)
+				taskid, err := s.getTaskIDFromTaskName(node.SnapClient, taskName)
+				if err != nil {
+					// error check
+				}
+				node.SnapClient.StopTask(taskid)
+				node.SnapClient.RemoveTask(taskid)
 				delete(node.SnapTasks, servicePodName)
 			}
 		}
 	}
 }
 
-func (s *SnapTaskController) Init(opertor *HyperpilotOperator) error {
+func (s *SnapTaskController) getTaskIDFromTaskName(manager *snap.TaskManager, name string) (string, error) {
+	tasks := manager.GetTasks().ScheduledTasks
+	for _, t := range tasks {
+		if t.Name == name {
+			return t.ID, nil
+		}
+	}
+	return "", errors.New("Can not find ID from Name")
+}
 
-	/* 1. Get all snap pods for each node, and create SnapClient for each snap
-	//for _, p := range opertor.pods {
-	//	if strings.HasPrefix(p.PodName, "snap-"){
-	//		s.Nodes[p.NodeId] = SnapNodeInfo{
-	//			NodeId: p.NodeId,
-	//			RunningServicePods: make(map[string]struct{}),
-	//			SnapClient: snap.NewSnapClient(p.PodName),
-	//			SnapTasks: make(map[string]string),
-	//		}
-	//	}
-	//}
-	*/
+func (s *SnapTaskController) Init(opertor *HyperpilotOpertor) error {
 
 	// Initialize steps:
-	// 1. Create SnapNodeInfo for each node, SnapClient default is nil
+	// 1. Create SnapNodeInfo for each node, TaskManager default is nil
 	for _, n := range opertor.nodes {
 		s.Nodes[n.NodeName] = &SnapNodeInfo{
 			NodeId:             n.NodeName,
@@ -104,27 +107,34 @@ func (s *SnapTaskController) Init(opertor *HyperpilotOperator) error {
 	}
 
 	// 2. If possible, find snap pod for each node
-	//     if snap exist, create SnapClient
+	//     if snap exist, create TaskManager
 	//     if snap no exist, leave it nil
 	for _, p := range opertor.pods {
 		if strings.HasPrefix(p.PodName, "snap-") {
 			if s.Nodes[p.NodeName].SnapClient == nil {
-				s.Nodes[p.NodeName].SnapClient = snap.NewSnapClient(p.PodName)
+				// todo use Snap Pod IP
+				//taskmanager, err := snap.NewTaskManager(p.PodIP)
+
+				// Use Snap host IP
+				taskmanager, err := snap.NewTaskManager(opertor.nodes[p.NodeId].ExternalIP)
+
+				if err != nil {
+					log.Printf(err.Error())
+				}
+				s.Nodes[p.NodeName].SnapClient = taskmanager
 			}
 		}
 	}
 
 	// 3. Get all running tasks from Snap API for existing snap pod
 	for _, node := range s.Nodes {
-		tasks, err := node.SnapClient.GetAllTasks()
-
-		if err != nil {
-			// todo: Check error
-		}
-		for _, task := range tasks {
-			// Naming snap tasks bsased on service pod name, e.g: s1-task
-			servicePodName := s.getServicePodNameFromSnapTask(task.Name)
-			node.SnapTasks[servicePodName] = task.Name
+		if node.SnapClient != nil {
+			tasks := node.SnapClient.GetTasks()
+			for _, task := range tasks.ScheduledTasks {
+				// Naming snap tasks bsased on service pod name, e.g: s1-task
+				servicePodName := s.getServicePodNameFromSnapTask(task.Name)
+				node.SnapTasks[servicePodName] = task.Name
+			}
 		}
 	}
 
@@ -137,14 +147,36 @@ func (s *SnapTaskController) Init(opertor *HyperpilotOperator) error {
 		}
 	}
 
+	s.PrintOut()
 	return nil
 }
 
+// todo : define task name
 func (s *SnapTaskController) getServicePodNameFromSnapTask(taskname string) string {
 	return strings.Split(taskname, "-")[0]
 }
 
 func (s *SnapTaskController) Receive(e Event) {
+
+	_, ok := e.(*PodEvent)
+	if ok {
+		s.ProcessPod(e.(*PodEvent))
+	}
+
+	_, ok = e.(*DeploymentEvent)
+	if ok {
+		s.ProcessDeployment(e.(*DeploymentEvent))
+	}
+
+	_, ok = e.(*DaemonSetEvent)
+	if ok {
+		s.ProcessDaemonSet(e.(*DaemonSetEvent))
+	}
+
+	_, ok = e.(*NodeEvent)
+	if ok {
+		s.ProcessNode(e.(*NodeEvent))
+	}
 
 }
 
@@ -190,10 +222,14 @@ func (s *SnapTaskController) ProcessPod(e *PodEvent) {
 
 			// If this is a snap pod, we need to update the snap client to point to the new Snap
 			if strings.HasPrefix(e.Cur.Name, "snap-") {
+				taskmanager, err := snap.NewTaskManager(e.Cur.Status.PodIP)
+				if err != nil {
+					// todo Check err
+				}
 
 				if nodeInfo.SnapClient != nil {
 					// snap is re-created
-					nodeInfo.SnapClient = snap.NewSnapClient(e.Cur.Name)
+					nodeInfo.SnapClient = taskmanager
 					nodeInfo.SnapTasks = map[string]string{}
 					log.Printf("[ Controller ] Found Snap Pod {%s}", e.Cur.Name)
 					s.reconcileSnapState()
@@ -201,17 +237,13 @@ func (s *SnapTaskController) ProcessPod(e *PodEvent) {
 				} else {
 					// Snap not running when controller start,
 					// Do Initialize Step 3 when snap pod start
-					nodeInfo.SnapClient = snap.NewSnapClient(e.Cur.Name)
-					tasks, err := nodeInfo.SnapClient.GetAllTasks()
+					nodeInfo.SnapClient = taskmanager
+					tasks := nodeInfo.SnapClient.GetTasks()
 
-					if err != nil {
-						// todo: Check error
-					}
-					for _, task := range tasks {
+					for _, task := range tasks.ScheduledTasks {
 						servicePodName := s.getServicePodNameFromSnapTask(task.Name)
 						nodeInfo.SnapTasks[servicePodName] = task.Name
 					}
-
 					return
 				}
 			}

@@ -1,4 +1,4 @@
-package snap
+package old
 
 import (
 	"github.com/intelsdi-x/snap/scheduler/wmap"

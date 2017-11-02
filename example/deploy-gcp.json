@@ -1,0 +1,1530 @@
+{
+    "name": "tech-demo",
+    "region": "us-west1-a",
+    "clusterType": "GCP",
+    "files": [
+        {
+            "fileId": "tech_demo_load_test",
+            "path": "~/locust_file/locustfile.py"
+        },
+        {
+            "fileId": "tech_demo_core_site_gcs_xml",
+            "path": "~/core-site.xml"
+        },
+        {
+            "fileId": "tech_demo_kafka_influxdb",
+            "path": "~/config.yaml"
+        }
+    ],
+    "nodeMapping": [
+        {
+            "task": "qos-data-store",
+            "id": 4
+        },
+        {
+            "task": "snap-goddd",
+            "id": 2
+        },
+        {
+            "task": "snap",
+            "id": 3
+        },
+        {
+            "task": "snap",
+            "id": 4
+        },
+        {
+            "task": "influxsrv",
+            "id": 5
+        },
+        {
+            "task": "grafana",
+            "id": 5
+        },
+        {
+            "task": "demo-ui",
+            "id": 1
+        },
+        {
+            "task": "mongo",
+            "id": 4
+        },
+        {
+            "task": "pathfinder",
+            "id": 3
+        },
+        {
+            "task": "goddd",
+            "id": 2
+        },
+        {
+            "task": "locust-master",
+            "id": 6
+        },
+        {
+            "task": "locust-slave",
+            "id": 6
+        },
+	{
+            "task": "locust-slave",
+            "id": 6
+        },
+        {
+            "task": "locust-slave",
+            "id": 6
+        },
+        {
+            "task": "locust-slave",
+            "id": 1
+        },
+        {
+            "task": "locust-slave",
+            "id": 1
+        },
+        {
+            "task": "locust-slave",
+            "id": 1
+        },
+        {
+            "task": "spark-master",
+            "id": 4
+        },
+        {
+            "task": "spark-worker2",
+            "id": 3
+        },
+        {
+            "task": "spark-worker",
+            "id": 2
+        },
+        {
+            "task": "spark-worker3",
+            "id": 4
+        }
+    ],
+    "clusterDefinition": {
+        "nodes": [
+            {
+                "instanceType": "n1-standard-4",
+                "id": 1
+            },
+            {
+                "instanceType": "n1-standard-4",
+                "id": 2
+            },
+            {
+                "instanceType": "n1-standard-4",
+                "id": 3
+            },
+            {
+                "instanceType": "n1-standard-4",
+                "id": 4
+            },
+            {
+                "instanceType": "n1-standard-4",
+                "id": 5
+            },
+            {
+                "instanceType": "n1-standard-4",
+                "id": 6
+            }
+        ]
+    },
+    "kubernetes": {
+        "secrets": [
+            {
+                "apiVersion": "v1",
+                "kind": "Secret",
+                "metadata": {
+                    "name": "myregistrykey",
+                    "namespace": "hyperpilot"
+                },
+                "type": "kubernetes.io\/dockerconfigjson",
+                "data": {
+                    ".dockerconfigjson": "ewoJImF1dGhzIjogewoJCSJodHRwczovL2luZGV4LmRvY2tlci5pby92MS8iOiB7CgkJCSJhdXRoIjogImFIbHdaWEp3YVd4dmRIVnpaWEk2YUhsd1pYSXhNak09IgoJCX0KCX0KfQ=="
+                }
+            }
+        ],
+        "taskDefinitions": [
+            {
+                "daemonset": {
+                    "apiVersion": "extensions\/v1beta1",
+                    "kind": "DaemonSet",
+                    "metadata": {
+                        "name": "controller-daemonset",
+                        "namespace": "hyperpilot"
+                    },
+                    "spec": {
+                        "template": {
+                            "metadata": {
+                                "labels": {
+                                    "name": "controller-daemonset"
+                                }
+                            },
+                            "spec": {
+                                "containers": [
+                                    {
+                                        "image": "hyperpilot\/controller",
+                                        "imagePullPolicy": "Always",
+                                        "name": "controller",
+                                        "securityContext": {
+                                            "privileged": true
+                                        },
+                                        "volumeMounts": [
+                                            {
+                                                "mountPath": "\/var\/run\/docker.sock",
+                                                "name": "docker-sock"
+                                            },
+                                            {
+                                                "mountPath": "\/var\/run\/command.sock",
+                                                "name": "command-sock"
+                                            },
+					    {
+                                                "mountPath": "\/sys\/fs\/cgroup",
+                                                "name": "cgroup"
+                                            }
+                                        ],
+                                        "env": [
+                                            {
+                                                "name": "MY_NODE_NAME",
+                                                "valueFrom": {
+                                                    "fieldRef": {
+                                                        "fieldPath": "spec.nodeName"
+                                                    }
+                                                }
+                                            }
+                                        ]
+                                    }
+                                ],
+                                "volumes": [
+                                    {
+                                        "hostPath": {
+                                            "path": "\/var\/run\/docker.sock"
+                                        },
+                                        "name": "docker-sock"
+                                    },
+                                    {
+                                        "hostPath": {
+                                            "path": "\/var\/run\/command.sock"
+                                        },
+                                        "name": "command-sock"
+                                    },
+                                    {
+                                        "hostPath": {
+                                            "path": "\/sys\/fs\/cgroup"
+                                        },
+                                        "name": "cgroup"
+                                    }
+                                ],
+                                "imagePullSecrets": [
+                                    {
+                                        "name": "myregistrykey"
+                                    }
+                                ],
+                                "terminationGracePeriodSeconds": 10
+                            }
+                        }
+                    }
+                }
+            },
+            {
+                "deployment": {
+                    "apiVersion": "extensions\/v1beta1",
+                    "kind": "Deployment",
+                    "metadata": {
+                        "labels": {
+                            "app": "snap",
+                            "version": "latest"
+                        },
+                        "name": "snap",
+                        "namespace": "hyperpilot"
+                    },
+                    "spec": {
+                        "replicas": 1,
+                        "selector": {
+                            "matchLabels": {
+                                "app": "snap",
+                                "version": "latest"
+                            }
+                        },
+                        "template": {
+                            "metadata": {
+                                "labels": {
+                                    "app": "snap",
+                                    "version": "latest"
+                                }
+                            },
+                            "spec": {
+                                "containers": [
+                                    {
+                                        "image": "hyperpilot\/snap:alpine-init",
+                                        "name": "snap",
+                                        "command": [
+                                            "\/usr\/local\/bin\/run.sh"
+                                        ],
+                                        "args": [
+                                            "https:\/\/s3.amazonaws.com\/hyperpilot-tech-demo-snap\/init-k8s.json"
+                                        ],
+                                        "resources": {
+                                            "limits": {
+                                                "cpu": "1000m",
+                                                "memory": "2048Mi"
+                                            }
+                                        },
+                                        "imagePullPolicy": "Always",
+                                        "securityContext": {
+                                            "privileged": true
+                                        },
+                                        "volumeMounts": [
+                                            {
+                                                "mountPath": "\/var\/run",
+                                                "name": "var-run"
+                                            },
+                                            {
+                                                "mountPath": "\/var\/log",
+                                                "name": "var-log"
+                                            },
+                                            {
+                                                "mountPath": "\/sys\/fs\/cgroup",
+                                                "name": "cgroup"
+                                            },
+                                            {
+                                                "mountPath": "\/var\/lib\/docker",
+                                                "name": "var-lib-docker"
+                                            },
+                                            {
+                                                "mountPath": "\/usr\/local\/bin\/docker",
+                                                "name": "usr-bin-docker"
+                                            },
+                                            {
+                                                "mountPath": "\/proc_host",
+                                                "name": "proc"
+                                            }
+                                        ],
+                                        "env": [
+                                            {
+                                                "name": "NODE_NAME",
+                                                "valueFrom": {
+                                                    "fieldRef": {
+                                                        "fieldPath": "spec.nodeName"
+                                                    }
+                                                }
+                                            }
+                                        ]
+                                    }
+                                ],
+                                "volumes": [
+                                    {
+                                        "hostPath": {
+                                            "path": "\/sys\/fs\/cgroup"
+                                        },
+                                        "name": "cgroup"
+                                    },
+                                    {
+                                        "hostPath": {
+                                            "path": "\/var\/lib\/docker\/"
+                                        },
+                                        "name": "var-lib-docker"
+                                    },
+                                    {
+                                        "hostPath": {
+                                            "path": "\/var\/log"
+                                        },
+                                        "name": "var-log"
+                                    },
+                                    {
+                                        "hostPath": {
+                                            "path": "\/var\/run"
+                                        },
+                                        "name": "var-run"
+                                    },
+                                    {
+                                        "hostPath": {
+                                            "path": "\/usr\/bin\/docker"
+                                        },
+                                        "name": "usr-bin-docker"
+                                    },
+                                    {
+                                        "hostPath": {
+                                            "path": "\/proc"
+                                        },
+                                        "name": "proc"
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                },
+                "family": "snap"
+            },
+            {
+                "deployment": {
+                    "apiVersion": "extensions\/v1beta1",
+                    "kind": "Deployment",
+                    "metadata": {
+                        "labels": {
+                            "app": "snap-goddd",
+                            "version": "latest"
+                        },
+                        "name": "snap-goddd",
+                        "namespace": "hyperpilot"
+                    },
+                    "spec": {
+                        "replicas": 1,
+                        "selector": {
+                            "matchLabels": {
+                                "app": "snap-goddd",
+                                "version": "latest"
+                            }
+                        },
+                        "template": {
+                            "metadata": {
+                                "labels": {
+                                    "app": "snap-goddd",
+                                    "version": "latest"
+                                }
+                            },
+                            "spec": {
+                                "containers": [
+                                    {
+                                        "image": "hyperpilot\/snap:alpine-init",
+                                        "name": "snap-goddd",
+                                        "command": [
+                                            "\/usr\/local\/bin\/run.sh"
+                                        ],
+                                        "args": [
+                                            "https:\/\/hyperpilot-snap-alpha.s3.amazonaws.com\/init-goddd-alpha.json"
+                                        ],
+                                        "resources": {
+                                            "limits": {
+                                                "cpu": "1000m",
+                                                "memory": "2048Mi"
+                                            }
+                                        },
+                                        "imagePullPolicy": "Always",
+                                        "securityContext": {
+                                            "privileged": true
+                                        },
+                                        "volumeMounts": [
+                                            {
+                                                "mountPath": "\/var\/run",
+                                                "name": "var-run"
+                                            },
+                                            {
+                                                "mountPath": "\/var\/log",
+                                                "name": "var-log"
+                                            },
+                                            {
+                                                "mountPath": "\/sys\/fs\/cgroup",
+                                                "name": "cgroup"
+                                            },
+                                            {
+                                                "mountPath": "\/var\/lib\/docker",
+                                                "name": "var-lib-docker"
+                                            },
+                                            {
+                                                "mountPath": "\/usr\/local\/bin\/docker",
+                                                "name": "usr-bin-docker"
+                                            },
+                                            {
+                                                "mountPath": "\/proc_host",
+                                                "name": "proc"
+                                            }
+                                        ],
+                                        "env": [
+                                            {
+                                                "name": "NODE_NAME",
+                                                "valueFrom": {
+                                                    "fieldRef": {
+                                                        "fieldPath": "spec.nodeName"
+                                                    }
+                                                }
+                                            }
+                                        ]
+                                    }
+                                ],
+                                "volumes": [
+                                    {
+                                        "hostPath": {
+                                            "path": "\/sys\/fs\/cgroup"
+                                        },
+                                        "name": "cgroup"
+                                    },
+                                    {
+                                        "hostPath": {
+                                            "path": "\/var\/lib\/docker\/"
+                                        },
+                                        "name": "var-lib-docker"
+                                    },
+                                    {
+                                        "hostPath": {
+                                            "path": "\/var\/log"
+                                        },
+                                        "name": "var-log"
+                                    },
+                                    {
+                                        "hostPath": {
+                                            "path": "\/var\/run"
+                                        },
+                                        "name": "var-run"
+                                    },
+                                    {
+                                        "hostPath": {
+                                            "path": "\/usr\/bin\/docker"
+                                        },
+                                        "name": "usr-bin-docker"
+                                    },
+                                    {
+                                        "hostPath": {
+                                            "path": "\/proc"
+                                        },
+                                        "name": "proc"
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                },
+                "family": "snap-goddd"
+            },
+            {
+                "deployment": {
+                    "apiVersion": "extensions\/v1beta1",
+                    "kind": "Deployment",
+                    "metadata": {
+                        "labels": {
+                            "app": "influxsrv"
+                        },
+                        "name": "influxsrv",
+                        "namespace": "hyperpilot"
+                    },
+                    "spec": {
+                        "replicas": 1,
+                        "template": {
+                            "metadata": {
+                                "labels": {
+                                    "app": "influxsrv"
+                                }
+                            },
+                            "spec": {
+                                "hostname": "influxsrv",
+                                "volumes": [
+                                    {
+                                        "hostPath": {
+                                            "path": "~/influx_data"
+                                        },
+                                        "name": "influx-data"
+                                    }
+                                ],
+                                "containers": [
+                                    {
+                                        "env": [
+                                            {
+                                                "name": "ADMIN_USER",
+                                                "value": "root"
+                                            },
+                                            {
+                                                "name": "PRE_CREATE_DB",
+                                                "value": "snap;spark;snapaverage"
+                                            },
+                                            {
+                                                "name": "INFLUXDB_INIT_PWD",
+                                                "value": "default"
+                                            }
+                                        ],
+                                        "image": "hyperpilot\/influx:1.3.6",
+                                        "name": "influxsrv",
+                                        "ports": [
+                                            {
+                                                "containerPort": 8083,
+                                                "hostPort": 8083,
+                                                "protocol": "TCP"
+                                            },
+                                            {
+                                                "containerPort": 8086,
+                                                "hostPort": 8086,
+                                                "protocol": "TCP"
+                                            },
+                                            {
+                                                "containerPort": 8088,
+                                                "hostPort": 8088,
+                                                "protocol": "TCP"
+                                            }
+                                        ],
+                                        "volumeMounts": [
+                                            {
+                                                "mountPath": "\/var\/lib\/influxdb",
+                                                "name": "influx-data"
+                                            }
+                                        ],
+                                        "resources": {
+                                            "requests": {
+                                                "cpu": "2000m",
+                                                "memory": "4096Mi"
+                                            }
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                },
+                "family": "influxsrv",
+                "portTypes": [
+                    1,
+                    1,
+                    1
+                ]
+            },
+            {
+                "deployment": {
+                    "apiVersion": "extensions\/v1beta1",
+                    "kind": "Deployment",
+                    "metadata": {
+                        "labels": {
+                            "app": "grafana"
+                        },
+                        "name": "grafana",
+                        "namespace": "hyperpilot"
+                    },
+                    "spec": {
+                        "replicas": 1,
+                        "template": {
+                            "metadata": {
+                                "labels": {
+                                    "app": "grafana"
+                                }
+                            },
+                            "spec": {
+                                "hostname": "grafana",
+                                "containers": [
+                                    {
+                                        "env": [
+                                            {
+                                                "name": "INFLUXDB_NAME_SNAP",
+                                                "value": "snap"
+                                            },
+                                            {
+                                                "name": "INFLUXDB_NAME_SPARK",
+                                                "value": "spark"
+                                            },
+                                            {
+                                                "name": "INFLUXDB_HOST",
+                                                "value": "influxsrv"
+                                            },
+                                            {
+                                                "name": "INFLUXDB_PORT",
+                                                "value": "8086"
+                                            },
+                                            {
+                                                "name": "INFLUXDB_USER",
+                                                "value": "root"
+                                            },
+                                            {
+                                                "name": "INFLUXDB_PASS",
+                                                "value": "default"
+                                            },
+                                            {
+                                                "name": "GF_AUTH_ANONYMOUS_ENABLED",
+                                                "value": "true"
+                                            },
+                                            {
+                                                "name": "GF_SERVER_ROOT_URL",
+                                                "value": "\/grafana"
+                                            }
+                                        ],
+                                        "image": "hyperpilot\/tech-demo-grafana",
+                                        "name": "grafana",
+                                        "imagePullPolicy": "Always",
+                                        "ports": [
+                                            {
+                                                "containerPort": 3000,
+                                                "hostPort": 3000,
+                                                "protocol": "TCP"
+                                            }
+                                        ],
+                                        "resources": {
+                                            "limits": {
+                                                "cpu": "500m",
+                                                "memory": "600Mi"
+                                            }
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                },
+                "family": "grafana",
+                "portTypes": [
+                    1
+                ]
+            },
+            {
+                "deployment": {
+                    "apiVersion": "extensions\/v1beta1",
+                    "kind": "Deployment",
+                    "metadata": {
+                        "labels": {
+                            "app": "demo-ui"
+                        },
+                        "name": "demo-ui",
+                        "namespace": "hyperpilot"
+                    },
+                    "spec": {
+                        "replicas": 1,
+                        "selector": {
+                            "matchLabels": {
+                                "app": "demo-ui"
+                            }
+                        },
+                        "template": {
+                            "metadata": {
+                                "labels": {
+                                    "app": "demo-ui"
+                                }
+                            },
+                            "spec": {
+                                "containers": [
+                                    {
+                                        "image": "hyperpilot\/demo-ui:gcp",
+                                        "imagePullPolicy": "Always",
+                                        "name": "demo-ui",
+                                        "ports": [
+                                            {
+                                                "containerPort": 8080,
+                                                "hostPort": 8080,
+                                                "protocol": "TCP"
+                                            }
+                                        ],
+                                        "resources": {
+                                            "limits": {
+                                                "cpu": "125m",
+                                                "memory": "150Mi"
+                                            }
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                },
+                "family": "demo-ui",
+                "portTypes": [
+                    1
+                ]
+            },
+            {
+                "deployment": {
+                    "apiVersion": "extensions\/v1beta1",
+                    "kind": "Deployment",
+                    "metadata": {
+                        "labels": {
+                            "app": "pathfinder"
+                        },
+                        "name": "pathfinder",
+                        "namespace": "default"
+                    },
+                    "spec": {
+                        "replicas": 1,
+                        "selector": {
+                            "matchLabels": {
+                                "app": "pathfinder"
+                            }
+                        },
+                        "template": {
+                            "metadata": {
+                                "labels": {
+                                    "app": "pathfinder"
+                                }
+                            },
+                            "spec": {
+                                "hostname": "pathfinder",
+                                "containers": [
+                                    {
+                                        "image": "hyperpilot\/pathfinder",
+                                        "name": "pathfinder",
+                                        "env": [
+                                            {
+                                                "value": "http:\/\/influxsrv.hyperpilot:8086",
+                                                "name": "INFLUXDB_URL"
+                                            },
+                                            {
+                                                "value": "root",
+                                                "name": "INFLUXDB_USERNAME"
+                                            },
+                                            {
+                                                "value": "default",
+                                                "name": "INFLUXDB_PASSWORD"
+                                            }
+                                        ],
+                                        "ports": [
+                                            {
+                                                "containerPort": 8080,
+                                                "hostPort": 8080,
+                                                "protocol": "TCP"
+                                            }
+                                        ],
+                                        "resources": {
+                                            "requests": {
+                                                "cpu": "1000m",
+                                                "memory": "100Mi"
+                                            }
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                },
+                "family": "pathfinder"
+            },
+            {
+                "deployment": {
+                    "apiVersion": "extensions\/v1beta1",
+                    "kind": "Deployment",
+                    "metadata": {
+                        "labels": {
+                            "app": "goddd",
+                            "hyperpilot.io/qos": "true"
+                        },
+                        "name": "goddd",
+                        "namespace": "default"
+                    },
+                    "spec": {
+                        "replicas": 1,
+                        "selector": {
+                            "matchLabels": {
+                                "app": "goddd"
+                            }
+                        },
+                        "template": {
+                            "metadata": {
+                                "labels": {
+                                    "app": "goddd",
+                                    "hyperpilot.io/qos": "true"
+                                }
+                            },
+                            "spec": {
+                                "containers": [
+                                    {
+                                        "env": [
+                                            {
+                                                "name": "BOOKING_MAXAGE",
+                                                "value": "5"
+                                            },
+                                            {
+                                                "name": "NO_PADDING",
+                                                "value": "True"
+                                            },
+                                            {
+                                                "name": "ROUTINGSERVICE_URL",
+                                                "value": "http:\/\/pathfinder:8080"
+                                            },
+                                            {
+                                                "name": "MONGO_MAXPOOLSIZE",
+                                                "value": "120"
+                                            },
+                                            {
+                                                "name": "MONGODB_URL",
+                                                "value": "mongo:27017"
+                                            },
+                                            {
+                                                "name": "DB_NAME",
+                                                "value": "goddd"
+                                            }
+                                        ],
+                                        "image": "hyperpilot\/goddd",
+                                        "name": "goddd",
+                                        "imagePullPolicy": "Always",
+                                        "ports": [
+                                            {
+                                                "containerPort": 8080,
+                                                "hostPort": 8080,
+                                                "protocol": "TCP"
+                                            }
+                                        ],
+                                        "resources": {
+                                            "requests": {
+                                                "cpu": "250m",
+                                                "memory": "256Mi"
+                                            }
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                },
+                "family": "goddd"
+            },
+            {
+                "deployment": {
+                    "apiVersion": "extensions\/v1beta1",
+                    "kind": "Deployment",
+                    "metadata": {
+                        "labels": {
+                            "app": "locust-master"
+                        },
+                        "name": "locust-master",
+                        "namespace": "hyperpilot"
+                    },
+                    "spec": {
+                        "replicas": 1,
+                        "selector": {
+                            "matchLabels": {
+                                "app": "locust-master"
+                            }
+                        },
+                        "template": {
+                            "metadata": {
+                                "labels": {
+                                    "app": "locust-master"
+                                }
+                            },
+                            "spec": {
+                                "containers": [
+                                    {
+                                        "resources": {
+                                            "requests": {
+                                                "cpu": "500m",
+                                                "memory": "512Mi"
+                                            }
+                                        },
+                                        "args": [
+                                            "--master",
+                                            "--host=http:\/\/goddd.default:8080",
+                                            "-f",
+                                            "\/locust_file\/locustfile.py"
+                                        ],
+                                        "imagePullPolicy": "Always",
+                                        "image": "hyperpilot\/locust",
+                                        "name": "locust-master",
+                                        "ports": [
+                                            {
+                                                "containerPort": 8089,
+                                                "hostPort": 8089,
+                                                "protocol": "TCP"
+                                            },
+                                            {
+                                                "containerPort": 5557,
+                                                "hostPort": 5557,
+                                                "protocol": "TCP"
+                                            },
+                                            {
+                                                "containerPort": 5558,
+                                                "hostPort": 5558,
+                                                "protocol": "TCP"
+                                            }
+                                        ],
+                                        "volumeMounts": [
+                                            {
+                                                "mountPath": "/locust_file",
+                                                "name": "home-ubuntu-locust-file"
+                                            }
+                                        ]
+                                    }
+                                ],
+                                "volumes": [
+                                    {
+                                        "hostPath": {
+                                            "path": "~/locust_file/"
+                                        },
+                                        "name": "home-ubuntu-locust-file"
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                },
+                "family": "locust-master",
+                "portTypes": [
+                    1
+                ]
+            },
+            {
+                "deployment": {
+                    "apiVersion": "extensions\/v1beta1",
+                    "kind": "Deployment",
+                    "metadata": {
+                        "labels": {
+                            "app": "locust-slave"
+                        },
+                        "name": "locust-slave",
+                        "namespace": "hyperpilot"
+                    },
+                    "spec": {
+                        "replicas": 1,
+                        "selector": {
+                            "matchLabels": {
+                                "app": "locust-slave"
+                            }
+                        },
+                        "template": {
+                            "metadata": {
+                                "labels": {
+                                    "app": "locust-slave"
+                                }
+                            },
+                            "spec": {
+                                "containers": [
+                                    {
+                                      "args": [
+                                            "--loglevel",
+                                            "DEBUG",
+                                            "--slave",
+                                            "--master-host=locust-master",
+                                            "-H",
+                                            "http:\/\/goddd.default:8080",
+                                            "-f",
+                                            "\/locust_file\/locustfile.py"
+                                        ],
+                                        "imagePullPolicy": "Always",
+                                        "image": "hyperpilot\/locust",
+                                        "name": "locust-slave",
+                                        "resources": {
+                                            "requests": {
+                                                "cpu": "250m",
+                                                "memory": "512Mi"
+                                            }
+                                        },
+                                        "volumeMounts": [
+                                            {
+                                                "mountPath": "\/locust_file",
+                                                "name": "home-ubuntu-locust-file"
+                                            }
+                                        ]
+                                    }
+                                ],
+                                "volumes": [
+                                    {
+                                        "hostPath": {
+                                            "path": "~/locust_file/"
+                                        },
+                                        "name": "home-ubuntu-locust-file"
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                },
+                "family": "locust-slave"
+            },
+            {
+                "deployment": {
+                    "apiVersion": "extensions\/v1beta1",
+                    "kind": "Deployment",
+                    "metadata": {
+                        "labels": {
+                            "app": "spark-master"
+                        },
+                        "name": "spark-master"
+                    },
+                    "spec": {
+                        "replicas": 1,
+                        "selector": {
+                            "matchLabels": {
+                                "app": "spark-master"
+                            }
+                        },
+                        "template": {
+                            "metadata": {
+                                "labels": {
+                                    "app": "spark-master"
+                                }
+                            },
+                            "spec": {
+                                "volumes": [
+                                    {
+                                        "hostPath": {
+                                            "path": "~/core-site.xml"
+                                        },
+                                        "name": "core-site"
+                                    }
+                                ],
+                                "containers": [
+                                    {
+                                        "image": "hyperpilot\/spark:2.1.0-hadoop-2.7-influx-master",
+                                        "name": "spark-master",
+                                        "env": [
+                                            {
+                                                "name": "SPARK_MASTER_PORT",
+                                                "value": "7077"
+                                            },
+                                            {
+                                                "name": "SPARK_MASTER_WEBUI_PORT",
+                                                "value": "8088"
+                                            },
+                                            {
+                                                "name": "INFLUXDB_HOST",
+                                                "value": "influxsrv"
+                                            },
+                                            {
+                                                "name": "INFLUXDB_PORT",
+                                                "value": "8086"
+                                            },
+                                            {
+                                                "name": "INFLUXDB_NAMESPACE",
+                                                "value": "hyperpilot"
+                                            },
+                                            {
+                                                "name": "INFLUXDB_NAME",
+                                                "value": "spark"
+                                            },
+                                            {
+                                                "name": "INFLUXDB_USER",
+                                                "value": "root"
+                                            },
+                                            {
+                                                "name": "INFLUXDB_PASS",
+                                                "value": "default"
+                                            }
+                                        ],
+                                        "volumeMounts": [
+                                            {
+                                                "mountPath": "\/usr\/hadoop-2.7.3\/etc\/hadoop\/core-site.xml",
+                                                "name": "core-site"
+                                            }
+                                        ],
+                                        "ports": [
+                                            {
+                                                "containerPort": 7077,
+                                                "hostPort": 7077,
+                                                "protocol": "TCP"
+                                            },
+                                            {
+                                                "containerPort": 8088,
+                                                "hostPort": 8088,
+                                                "protocol": "TCP"
+                                            },
+                                            {
+                                                "containerPort": 6066,
+                                                "hostPort": 6066,
+                                                "protocol": "TCP"
+                                            }
+                                        ],
+                                        "resources": {
+                                            "limits": {
+                                                "cpu": "500m"
+                                            }
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                },
+                "family": "spark-master",
+                "portTypes": [
+                    0,
+                    1,
+                    0
+                ]
+            },
+            {
+                "deployment": {
+                    "apiVersion": "extensions\/v1beta1",
+                    "kind": "Deployment",
+                    "metadata": {
+                        "labels": {
+                            "app": "spark-worker",
+                            "hyperpilot.io/wclass": "BE"
+                        },
+                        "name": "spark-worker"
+                    },
+                    "spec": {
+                        "replicas": 1,
+                        "selector": {
+                            "matchLabels": {
+                                "app": "spark-worker"
+                            }
+                        },
+                        "template": {
+                            "metadata": {
+                                "labels": {
+                                    "app": "spark-worker",
+                                    "hyperpilot.io/wclass": "BE"
+                                },
+                                "annotations": {
+                                    "scheduler.alpha.kubernetes.io/affinity": "{\n                                        \"nodeAffinity\": {\n                                            \"requiredDuringSchedulingIgnoredDuringExecution\": {\n                                                \"nodeSelectorTerms\": [\n                                                    {\n                                                        \"matchExpressions\": [\n                                                            {\n                                                                \"key\": \"hyperpilot.io\/be-enabled\",\n                                                                \"operator\": \"In\",\n                                                                \"values\": [\n                                                                    \"true\"\n                                                                ]\n                                                            }\n                                                        ]\n                                                    }\n                                                ]\n                                            }\n                                        }\n                                    }"
+                                }
+                            },
+                            "spec": {
+                                "volumes": [
+                                    {
+                                        "hostPath": {
+                                            "path": "~/core-site.xml"
+                                        },
+                                        "name": "core-site"
+                                    },
+                                    {
+                                        "hostPath": {
+                                            "path": "~/spark-local-dir"
+                                        },
+                                        "name": "spark-local-dir"
+                                    }
+                                ],
+                                "containers": [
+                                    {
+                                        "imagePullPolicy": "Always",
+                                        "volumeMounts": [
+                                            {
+                                                "mountPath": "\/usr\/hadoop-2.7.3\/etc\/hadoop\/core-site.xml",
+                                                "name": "core-site"
+                                            },
+                                            {
+                                                "mountPath": "\/tmp\/spark",
+                                                "name": "spark-local-dir"
+                                            }
+                                        ],
+                                        "image": "hyperpilot\/spark:2.1.0-hadoop-2.7-influx",
+                                        "name": "spark-worker",
+                                        "env": [
+                                            {
+                                                "name": "SPARK_WORKER_PORT",
+                                                "value": "0"
+                                            },
+                                            {
+                                                "name": "SPARK_LOCAL_DIRS",
+                                                "value": "\/tmp\/spark"
+                                            }
+                                        ],
+                                        "command": [
+                                            "bin\/spark-class",
+                                            "org.apache.spark.deploy.worker.Worker",
+                                            "--cores",
+                                            "9",
+                                            "--memory",
+                                            "15360M",
+                                            "spark:\/\/spark-master:7077"
+                                        ],
+                                        "ports": [
+                                            {
+                                                "containerPort": 8081,
+                                                "hostPort": 8081,
+                                                "protocol": "TCP"
+                                            },
+                                            {
+                                                "containerPort": 4040,
+                                                "hostPort": 4040,
+                                                "protocol": "TCP"
+                                            }
+                                        ],
+                                        "resources": {
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                },
+                "family": "spark-worker"
+            },
+            {
+                "deployment": {
+                    "apiVersion": "extensions\/v1beta1",
+                    "kind": "Deployment",
+                    "metadata": {
+                        "labels": {
+                            "app": "spark-worker2",
+                            "hyperpilot.io/wclass": "BE"
+                        },
+                        "name": "spark-worker2"
+                    },
+                    "spec": {
+                        "replicas": 1,
+                        "selector": {
+                            "matchLabels": {
+                                "app": "spark-worker2"
+                            }
+                        },
+                        "template": {
+                            "metadata": {
+                                "labels": {
+                                    "app": "spark-worker2",
+                                    "hyperpilot.io/wclass": "BE"
+                                },
+                                "annotations": {
+                                    "scheduler.alpha.kubernetes.io/affinity": "{\n                                        \"nodeAffinity\": {\n                                            \"requiredDuringSchedulingIgnoredDuringExecution\": {\n                                                \"nodeSelectorTerms\": [\n                                                    {\n                                                        \"matchExpressions\": [\n                                                            {\n                                                                \"key\": \"hyperpilot.io\/be-enabled\",\n                                                                \"operator\": \"In\",\n                                                                \"values\": [\n                                                                    \"true\"\n                                                                ]\n                                                            }\n                                                        ]\n                                                    }\n                                                ]\n                                            }\n                                        }\n                                    }"
+                                }
+                            },
+                            "spec": {
+                                "volumes": [
+                                    {
+                                        "hostPath": {
+                                            "path": "~/core-site.xml"
+                                        },
+                                        "name": "core-site"
+                                    },
+                                    {
+                                        "hostPath": {
+                                            "path": "~/spark-local-dir"
+                                        },
+                                        "name": "spark-local-dir"
+                                    }
+                                ],
+                                "containers": [
+                                    {
+                                        "imagePullPolicy": "Always",
+                                        "volumeMounts": [
+                                            {
+                                                "mountPath": "\/usr\/hadoop-2.7.3\/etc\/hadoop\/core-site.xml",
+                                                "name": "core-site"
+                                            },
+                                            {
+                                                "mountPath": "\/tmp\/spark",
+                                                "name": "spark-local-dir"
+                                            }
+                                        ],
+                                        "image": "hyperpilot\/spark:2.1.0-hadoop-2.7-influx",
+                                        "name": "spark-worker2",
+                                        "env": [
+                                            {
+                                                "name": "SPARK_WORKER_PORT",
+                                                "value": "0"
+                                            },
+                                            {
+                                                "name": "SPARK_LOCAL_DIRS",
+                                                "value": "\/tmp\/spark"
+                                            }
+                                        ],
+                                        "command": [
+                                            "bin\/spark-class",
+                                            "org.apache.spark.deploy.worker.Worker",
+                                            "--cores",
+                                            "9",
+                                            "--memory",
+                                            "15360M",
+                                            "spark:\/\/spark-master:7077"
+                                        ],
+                                        "ports": [
+                                            {
+                                                "containerPort": 8081,
+                                                "hostPort": 8081,
+                                                "protocol": "TCP"
+                                            },
+                                            {
+                                                "containerPort": 4040,
+                                                "hostPort": 4040,
+                                                "protocol": "TCP"
+                                            }
+                                        ],
+                                        "resources": {
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                },
+                "family": "spark-worker2"
+            },
+            {
+                "deployment": {
+                    "apiVersion": "extensions\/v1beta1",
+                    "kind": "Deployment",
+                    "metadata": {
+                        "labels": {
+                            "app": "spark-worker3",
+                            "hyperpilot.io/wclass": "BE"
+                        },
+                        "name": "spark-worker3"
+                    },
+                    "spec": {
+                        "replicas": 1,
+                        "selector": {
+                            "matchLabels": {
+                                "app": "spark-worker3"
+                            }
+                        },
+                        "template": {
+                            "metadata": {
+                                "labels": {
+                                    "app": "spark-worker3",
+                                    "hyperpilot.io/wclass": "BE"
+                                },
+                                "annotations": {
+                                    "scheduler.alpha.kubernetes.io/affinity": "{\n                                        \"nodeAffinity\": {\n                                            \"requiredDuringSchedulingIgnoredDuringExecution\": {\n                                                \"nodeSelectorTerms\": [\n                                                    {\n                                                        \"matchExpressions\": [\n                                                            {\n                                                                \"key\": \"hyperpilot.io\/be-enabled\",\n                                                                \"operator\": \"In\",\n                                                                \"values\": [\n                                                                    \"true\"\n                                                                ]\n                                                            }\n                                                        ]\n                                                    }\n                                                ]\n                                            }\n                                        }\n                                    }"
+                                }
+                            },
+                            "spec": {
+                                "volumes": [
+                                    {
+                                        "hostPath": {
+                                            "path": "~/core-site.xml"
+                                        },
+                                        "name": "core-site"
+                                    },
+                                    {
+                                        "hostPath": {
+                                            "path": "~/spark-local-dir"
+                                        },
+                                        "name": "spark-local-dir"
+                                    }
+                                ],
+                                "containers": [
+                                    {
+                                        "imagePullPolicy": "Always",
+                                        "volumeMounts": [
+                                            {
+                                                "mountPath": "\/usr\/hadoop-2.7.3\/etc\/hadoop\/core-site.xml",
+                                                "name": "core-site"
+                                            },
+                                            {
+                                                "mountPath": "\/tmp\/spark",
+                                                "name": "spark-local-dir"
+                                            }
+                                        ],
+                                        "image": "hyperpilot\/spark:2.1.0-hadoop-2.7-influx",
+                                        "name": "spark-worker3",
+                                        "env": [
+                                            {
+                                                "name": "SPARK_WORKER_PORT",
+                                                "value": "0"
+                                            },
+                                            {
+                                                "name": "SPARK_LOCAL_DIRS",
+                                                "value": "\/tmp\/spark"
+                                            }
+                                        ],
+                                        "command": [
+                                            "bin\/spark-class",
+                                            "org.apache.spark.deploy.worker.Worker",
+                                            "--cores",
+                                            "9",
+                                            "--memory",
+                                            "15360M",
+                                            "spark:\/\/spark-master:7077"
+                                        ],
+                                        "ports": [
+                                            {
+                                                "containerPort": 8081,
+                                                "hostPort": 8081,
+                                                "protocol": "TCP"
+                                            },
+                                            {
+                                                "containerPort": 4040,
+                                                "hostPort": 4040,
+                                                "protocol": "TCP"
+                                            }
+                                        ],
+                                        "resources": {
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                },
+                "family": "spark-worker3"
+            },
+            {
+                "deployment": {
+                    "apiVersion": "extensions\/v1beta1",
+                    "kind": "Deployment",
+                    "metadata": {
+                        "labels": {
+                            "app": "mongo"
+                        },
+                        "name": "mongo"
+                    },
+                    "spec": {
+                        "replicas": 1,
+                        "selector": {
+                            "matchLabels": {
+                                "app": "mongo"
+                            }
+                        },
+                        "template": {
+                            "metadata": {
+                                "labels": {
+                                    "app": "mongo"
+                                }
+                            },
+                            "spec": {
+                                "volumes": [
+                                    {
+                                        "hostPath": {
+                                            "path": "~/mongo_data"
+                                        },
+                                        "name": "mongo-data"
+                                    }
+                                ],
+                                "containers": [
+                                    {
+                                        "volumeMounts": [
+                                            {
+                                                "mountPath": "\/data\/db",
+                                                "name": "mongo-data"
+                                            }
+                                        ],
+                                        "image": "mongo",
+                                        "name": "mongo",
+                                        "ports": [
+                                            {
+                                                "containerPort": 27017,
+                                                "hostPort": 27017,
+                                                "protocol": "TCP"
+                                            }
+                                        ],
+                                        "resources": {
+                                            "requests": {
+                                                "cpu": "500m",
+                                                "memory": "512Mi"
+                                            }
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                },
+                "family": "mongo"
+            },
+            {
+                "deployment": {
+                    "apiVersion": "extensions\/v1beta1",
+                    "kind": "Deployment",
+                    "metadata": {
+                        "labels": {
+                            "app": "qos-data-store"
+                        },
+                        "name": "qos-data-store",
+                        "namespace": "hyperpilot"
+                    },
+                    "spec": {
+                        "replicas": 1,
+                        "selector": {
+                            "matchLabels": {
+                                "app": "qos-data-store"
+                            }
+                        },
+                        "template": {
+                            "metadata": {
+                                "labels": {
+                                    "app": "qos-data-store"
+                                }
+                            },
+                            "spec": {
+                                "containers": [
+                                    {
+                                        "image": "hyperpilot\/qos-data-store",
+                                        "name": "qos-data-store",
+                                        "ports": [
+                                            {
+                                                "containerPort": 7781,
+                                                "hostPort": 7781,
+                                                "protocol": "TCP"
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                },
+                "family": "qos-data-store"
+            }
+        ]
+    }
+}

@@ -13,6 +13,8 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
+var runOutsideCluster *bool
+
 func main() {
 	// Set logging output to standard console out
 	log.SetOutput(os.Stdout)

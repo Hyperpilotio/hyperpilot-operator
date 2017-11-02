@@ -39,16 +39,44 @@ imports:
   version: 44145f04b68cf362d9c4df2182967c2275eaefed
 - name: github.com/google/gofuzz
   version: 44d81051d367757e1c7c6a5a86423ece9afcf63c
+- name: github.com/hashicorp/go-immutable-radix
+  version: 8aac2701530899b64bdea735a1de8da899815220
+- name: github.com/hashicorp/go-msgpack
+  version: fa3f63826f7c23912c15263591e65d54d080b458
+  subpackages:
+  - codec
 - name: github.com/hashicorp/golang-lru
   version: a0d98a5f288019575c6d1f4bb1573fef2d1fcdc4
   subpackages:
   - simplelru
+- name: github.com/hashicorp/memberlist
+  version: a93fbd426dd831f5a66db3adc6a5ffa6f44cc60a
 - name: github.com/howeyc/gopass
   version: bf9dde6d0d2c004a008c27aaee91170c786f6db8
 - name: github.com/imdario/mergo
   version: 6633656539c1639d9d78127b7d47c622b5d7b6dc
+- name: github.com/intelsdi-x/snap
+  version: 79e1dd457d77c985491c2f4746cbc425fb3dc2dd
+  subpackages:
+  - control/plugin/cpolicy
+  - core
+  - core/cdata
+  - core/ctypes
+  - core/serror
+  - mgmt/rest/api
+  - mgmt/rest/client
+  - mgmt/rest/v1
+  - mgmt/rest/v1/rbody
+  - mgmt/tribe/agreement
+  - pkg/ctree
+  - pkg/fileutils
+  - pkg/schedule
+  - pkg/stringutils
+  - scheduler/wmap
 - name: github.com/juju/ratelimit
   version: 5b9ff866471762aa2ab2dced63c9fb6f53921342
+- name: github.com/julienschmidt/httprouter
+  version: 8c199fb6259ffc1af525cc3ad52ee60ba8359669
 - name: github.com/mailru/easyjson
   version: d5b7844b561a7bc640052f1b935f7b800330d7e0
   subpackages:
@@ -59,12 +87,18 @@ imports:
   version: 8a290539e2e8629dbc4e6bad948158f790ec31f4
 - name: github.com/PuerkitoBio/urlesc
   version: 5bd2802263f21d8788851d5305584c82a5c75d7e
+- name: github.com/robfig/cron
+  version: 32d9c273155a0506d27cf73dd1246e86a470997e
+- name: github.com/sirupsen/logrus
+  version: be52937128b38f1d99787bb476c789e2af1147f1
 - name: github.com/spf13/pflag
   version: 9ff6c6923cfffbcd502984b8e0c80539a94968b7
 - name: github.com/ugorji/go
   version: ded73eae5db7e7a0ef6f55aace87a2873c5d2b74
   subpackages:
   - codec
+- name: github.com/urfave/negroni
+  version: c7477ad8e330bef55bf1ebe300cf8aa67c492d1b
 - name: golang.org/x/crypto
   version: d172538b2cfce0c13cee31e647d0367aa8cd2486
   subpackages:
@@ -224,4 +258,21 @@ imports:
   - util/flowcontrol
   - util/homedir
   - util/integer
-testImports: []
+testImports:
+- name: github.com/gopherjs/gopherjs
+  version: a0a7cfed7b2a54080888fd2b3d4a3ec14562c86c
+  subpackages:
+  - js
+- name: github.com/jtolds/gls
+  version: 77f18212c9c7edc9bd6a33d383a7b545ce62f064
+- name: github.com/smartystreets/assertions
+  version: 0b37b35ec7434b77e77a4bb29b79677cced992ea
+  subpackages:
+  - internal/go-render/render
+  - internal/oglematchers
+- name: github.com/smartystreets/goconvey
+  version: e5b2b7c9111590d019a696c7800593f666e1a7f4
+  subpackages:
+  - convey
+  - convey/gotest
+  - convey/reporting

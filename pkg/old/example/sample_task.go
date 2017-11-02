@@ -1,0 +1,56 @@
+package old
+
+import (
+	"fmt"
+
+	"github.com/hyperpilotio/hyperpilot-operator/pkg/old"
+	"github.com/intelsdi-x/snap/scheduler/wmap"
+)
+
+func SampleFunction() {
+
+	// Create collector
+	prometheusConfig := make(map[string]interface{})
+	prometheusConfig["endpoint"] = "http://resource-worker-0.resource-worker:7998"
+
+	metrics := make(map[string]int)
+	metrics["/hyperpilot/prometheus"] = 1
+	prometheusCollector := old.NewCollector("/hyperpilot/prometheus", metrics, prometheusConfig)
+
+	// create processor
+	processorConfig := make(map[string]interface{})
+	processorConfig["collect.namespaces"] = "default"
+	processorConfig["collect.include_empty_namespace"] = true
+	processorConfig["collect.exclude_metrics"] = "*"
+	processorConfig["collect.exclude_metrics.except"] = "*perc"
+	processorConfig["average"] = ""
+	averageProcessor := old.NewProcessor("snap-average-counter-processor", 1, processorConfig)
+
+	// create publisher
+	publisherConfig := make(map[string]interface{})
+	publisherConfig["host"] = "influxsrv"
+	publisherConfig["port"] = 8086
+	publisherConfig["database"] = "snap"
+	publisherConfig["user"] = "root"
+	publisherConfig["password"] = "default"
+	publisherConfig["https"] = false
+	publisherConfig["skip-verify"] = false
+	influxPublisher := old.NewPublisher("influxdb", 1, publisherConfig)
+
+	// compose all these component
+	wf := influxPublisher.JoinProcessor(averageProcessor).Join(prometheusCollector).Join(wmap.NewWorkflowMap())
+
+	task, err := old.NewTask("sampleTask", wf)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+
+	manager, err := old.NewSnapTaskManager("http://localhost:8181", "v1")
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	id, err := manager.CreateTask(task)
+	fmt.Printf("ID: %v\n Error: %v", id, err)
+}
