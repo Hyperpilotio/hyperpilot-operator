@@ -7,6 +7,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/pkg/api/v1"
 )
 
 //const K8SEVENT = "K8SEVENT"
@@ -25,13 +26,6 @@ type NodeInfo struct {
 	NodeName   string
 	ExternalIP string
 	InternalIP string
-}
-
-type PodInfo struct {
-	PodName  string
-	NodeId   string
-	PodIP    string
-	NodeName string
 }
 
 type EventProcessor interface {
@@ -84,7 +78,7 @@ type HyperpilotOperator struct {
 	controllers []BaseController
 
 	nodes map[string]NodeInfo
-	pods  map[string]PodInfo
+	pods  map[string]*v1.Pod
 
 	state int
 }
@@ -110,7 +104,7 @@ func NewHyperpilotOperator(kclient *kubernetes.Clientset, controllers []EventPro
 		controllers:        baseControllers,
 		kclient:            kclient,
 		nodes:              map[string]NodeInfo{},
-		pods:               map[string]PodInfo{},
+		pods:               map[string]*v1.Pod{},
 		state:              OPERATOR_NOT_RUNNING,
 	}
 
@@ -162,11 +156,7 @@ func (c *HyperpilotOperator) ProcessPod(e *PodEvent) {
 	// node info is available until pod is in running state
 	if e.EventType == UPDATE {
 		if e.Old.Status.Phase == "Pending" && e.Cur.Status.Phase == "Running" {
-			c.pods[e.Cur.Name] = PodInfo{
-				PodName: e.Cur.Name,
-				NodeId:  e.Cur.Spec.NodeName,
-				PodIP:   e.Cur.Status.PodIP,
-			}
+			c.pods[e.Cur.Name] = e.Cur
 
 			log.Printf("[ operator ] Insert NEW Pod {%s}", c.pods[e.Cur.Name])
 		}
@@ -210,13 +200,7 @@ func (c *HyperpilotOperator) Run(stopCh <-chan struct{}) error {
 	}
 
 	for _, p := range pods.Items {
-		a := PodInfo{
-			PodName:  p.Name,
-			NodeId:   p.Spec.NodeName,
-			PodIP:    p.Status.PodIP,
-			NodeName: p.Spec.NodeName,
-		}
-		c.pods[a.PodName] = a
+		c.pods[p.Name] = &p
 	}
 
 	// 3. Initialize controllers
