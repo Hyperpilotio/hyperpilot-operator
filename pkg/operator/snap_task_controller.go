@@ -11,6 +11,7 @@ import (
 
 type SnapNodeInfo struct {
 	NodeId     string
+	ExternalIP string
 	SnapClient *snap.TaskManager
 
 	// servicePodName <-> Task name
@@ -21,16 +22,19 @@ type SnapNodeInfo struct {
 }
 
 type SnapTaskController struct {
-	ServiceList []string
-	Nodes       map[string]*SnapNodeInfo
+	isOutsideCluster bool
+	ServiceList      []string
+	Nodes            map[string]*SnapNodeInfo
 }
 
-func NewSnapTaskController() *SnapTaskController {
+func NewSnapTaskController(runOutsideCluster bool) *SnapTaskController {
 	return &SnapTaskController{
 		ServiceList: []string{
+			//There will be other type in the future
 			"resource-worker",
 		},
-		Nodes: map[string]*SnapNodeInfo{},
+		Nodes:            map[string]*SnapNodeInfo{},
+		isOutsideCluster: runOutsideCluster,
 	}
 }
 
@@ -46,11 +50,14 @@ func (s *SnapTaskController) Close() {
 //for each node {
 // Compare node.SnapTasks and RunningServicePods
 // If any pod in runningServicePods doesn't exist in SnapTasks value,
-// Create a new snap task for that new pod
+// 		Create a new snap task for that new pod
+//		return true if reconcile Snap OK
 // If any tasks in SnapTasks points to a pod not in the running service pods list,
-// Delete the task from that snap.
+// 		Delete the task from that snap.
+//		return true if reconcile Snap OK
 //}
-func (s *SnapTaskController) reconcileSnapState() {
+//todo: snap is not ready yet
+func (s *SnapTaskController) reconcileSnapState() bool {
 
 	// Check each node
 	for _, node := range s.Nodes {
@@ -61,8 +68,13 @@ func (s *SnapTaskController) reconcileSnapState() {
 
 			if !ok {
 				task := snap.NewTask(servicePodName)
-				node.SnapClient.CreateTask(task)
+				_, err := node.SnapClient.CreateTask(task)
+				if err != nil {
+					log.Printf(err.Error())
+					return false
+				}
 				node.SnapTasks[servicePodName] = task.Name
+				return true
 			}
 		}
 
@@ -73,7 +85,8 @@ func (s *SnapTaskController) reconcileSnapState() {
 			if !ok {
 				taskid, err := s.getTaskIDFromTaskName(node.SnapClient, taskName)
 				if err != nil {
-					// error check
+					log.Printf(err.Error())
+					return false
 				}
 				node.SnapClient.StopTask(taskid)
 				node.SnapClient.RemoveTask(taskid)
@@ -81,6 +94,7 @@ func (s *SnapTaskController) reconcileSnapState() {
 			}
 		}
 	}
+	return true
 }
 
 func (s *SnapTaskController) getTaskIDFromTaskName(manager *snap.TaskManager, name string) (string, error) {
@@ -93,13 +107,13 @@ func (s *SnapTaskController) getTaskIDFromTaskName(manager *snap.TaskManager, na
 	return "", errors.New("Can not find ID from Name")
 }
 
-func (s *SnapTaskController) Init(opertor *HyperpilotOpertor) error {
-
+func (s *SnapTaskController) Init(opertor *HyperpilotOperator) error {
 	// Initialize steps:
 	// 1. Create SnapNodeInfo for each node, TaskManager default is nil
 	for _, n := range opertor.nodes {
 		s.Nodes[n.NodeName] = &SnapNodeInfo{
 			NodeId:             n.NodeName,
+			ExternalIP:         n.ExternalIP,
 			RunningServicePods: make(map[string]struct{}),
 			SnapTasks:          make(map[string]string),
 			SnapClient:         nil,
@@ -112,14 +126,18 @@ func (s *SnapTaskController) Init(opertor *HyperpilotOpertor) error {
 	for _, p := range opertor.pods {
 		if strings.HasPrefix(p.PodName, "snap-") {
 			if s.Nodes[p.NodeName].SnapClient == nil {
-				// todo use Snap Pod IP
-				//taskmanager, err := snap.NewTaskManager(p.PodIP)
-
-				// Use Snap host IP
-				taskmanager, err := snap.NewTaskManager(opertor.nodes[p.NodeId].ExternalIP)
+				var taskmanager *snap.TaskManager
+				var err error
+				if s.isOutsideCluster {
+					// If run outside cluster, task manager communicate with snap with snap HOST IP
+					taskmanager, err = snap.NewTaskManager(s.Nodes[p.NodeId].ExternalIP)
+				} else {
+					// if inside k8s cluster, task manager communicate with snap with snap POD ip
+					taskmanager, err = snap.NewTaskManager(p.PodIP)
+				}
 
 				if err != nil {
-					log.Printf(err.Error())
+					log.Printf("Failed to create Snap Task Manager: " + err.Error())
 				}
 				s.Nodes[p.NodeName].SnapClient = taskmanager
 			}
@@ -131,9 +149,11 @@ func (s *SnapTaskController) Init(opertor *HyperpilotOpertor) error {
 		if node.SnapClient != nil {
 			tasks := node.SnapClient.GetTasks()
 			for _, task := range tasks.ScheduledTasks {
-				// Naming snap tasks bsased on service pod name, e.g: s1-task
-				servicePodName := s.getServicePodNameFromSnapTask(task.Name)
-				node.SnapTasks[servicePodName] = task.Name
+				// only look for task which controller care about
+				if s.isSnapControllerTask(task.Name) {
+					servicePodName := s.getServicePodNameFromSnapTask(task.Name)
+					node.SnapTasks[servicePodName] = task.Name
+				}
 			}
 		}
 	}
@@ -147,37 +167,22 @@ func (s *SnapTaskController) Init(opertor *HyperpilotOpertor) error {
 		}
 	}
 
-	s.PrintOut()
+	s.printOut()
 	return nil
 }
 
-// todo : define task name
+// Task name format PROMETHEUS-<POD_NAME>
+// e.g. PROMETHEUS-resource-worker-spark-9br5d
 func (s *SnapTaskController) getServicePodNameFromSnapTask(taskname string) string {
-	return strings.Split(taskname, "-")[0]
+	return strings.SplitN(taskname, "-", 2)[1]
 }
 
-func (s *SnapTaskController) Receive(e Event) {
-
-	_, ok := e.(*PodEvent)
-	if ok {
-		s.ProcessPod(e.(*PodEvent))
+//we only want task name start with PROMETHEUS_TASK_NAME_PREFIX
+func (s *SnapTaskController) isSnapControllerTask(taskname string) bool {
+	if strings.HasPrefix(taskname, snap.PROMETHEUS_TASK_NAME_PREFIX) {
+		return true
 	}
-
-	_, ok = e.(*DeploymentEvent)
-	if ok {
-		s.ProcessDeployment(e.(*DeploymentEvent))
-	}
-
-	_, ok = e.(*DaemonSetEvent)
-	if ok {
-		s.ProcessDaemonSet(e.(*DaemonSetEvent))
-	}
-
-	_, ok = e.(*NodeEvent)
-	if ok {
-		s.ProcessNode(e.(*NodeEvent))
-	}
-
+	return false
 }
 
 func (s *SnapTaskController) ProcessNode(e *NodeEvent) {
@@ -214,7 +219,10 @@ func (s *SnapTaskController) ProcessPod(e *PodEvent) {
 			for _, service := range s.ServiceList {
 				if strings.HasPrefix(e.Cur.Name, service) {
 					nodeInfo.RunningServicePods[e.Cur.Name] = struct{}{}
-					s.reconcileSnapState()
+					if s.reconcileSnapState() == false {
+						delete(nodeInfo.RunningServicePods, e.Cur.Name)
+						return
+					}
 					log.Printf("[ Controller ] Insert Pod {%s}", e.Cur.Name)
 					return
 				}
@@ -222,9 +230,18 @@ func (s *SnapTaskController) ProcessPod(e *PodEvent) {
 
 			// If this is a snap pod, we need to update the snap client to point to the new Snap
 			if strings.HasPrefix(e.Cur.Name, "snap-") {
-				taskmanager, err := snap.NewTaskManager(e.Cur.Status.PodIP)
+				var taskmanager *snap.TaskManager
+				var err error
+				if s.isOutsideCluster {
+					// If run outside cluster, task manager communicate with snap with snap HOST IP
+					taskmanager, err = snap.NewTaskManager(s.Nodes[e.Cur.Spec.NodeName].ExternalIP)
+				} else {
+					// if inside k8s cluster, task manager communicate with snap with snap POD ip
+					taskmanager, err = snap.NewTaskManager(e.Cur.Status.PodIP)
+				}
+
 				if err != nil {
-					// todo Check err
+					log.Printf("Failed to create Snap Task Manager: " + err.Error())
 				}
 
 				if nodeInfo.SnapClient != nil {
@@ -267,8 +284,7 @@ func (s *SnapTaskController) ProcessDaemonSet(e *DaemonSetEvent) {
 	}
 }
 
-func (s *SnapTaskController) PrintOut() {
-
+func (s *SnapTaskController) printOut() {
 	log.Printf("================================")
 	for k, v := range s.Nodes {
 		log.Printf("Controller info: {NodeName, Info}: {%s, %s}", k, v)

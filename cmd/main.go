@@ -36,7 +36,7 @@ func main() {
 	log.Printf("Starting operator...")
 
 	controllers := []operator.EventProcessor{}
-	controllers = append(controllers, operator.NewSnapTaskController())
+	controllers = append(controllers, operator.NewSnapTaskController(*runOutsideCluster))
 	hpc, err := operator.NewHyperpilotOperator(clientset, controllers)
 	if err != nil {
 		log.Printf("Unable to create hyperpilot operator: " + err.Error())

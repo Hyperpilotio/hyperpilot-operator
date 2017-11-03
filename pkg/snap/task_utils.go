@@ -57,7 +57,7 @@ func (collector *Collector) PutPublisher(publisher *Publisher) *Collector {
 }
 
 func (collector *Collector) Join(workflowMap *wmap.WorkflowMap) *wmap.WorkflowMap {
-	workflowMap.Collect = collector.collector
+	workflowMap.CollectNode = collector.collector
 	return workflowMap
 }
 

@@ -1,0 +1,23 @@
+apiVersion: apps/v1beta1 # for versions before 1.8.0 use apps/v1beta1
+kind: Deployment
+metadata:
+  name: hyperpilot-operator
+  namespace: hyperpilot
+  labels:
+    app: hyperpilot-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hyperpilot-operator
+  template:
+    metadata:
+      labels:
+        app: hyperpilot-operator
+    spec:
+      containers:
+      - name: hyperpilot-operator
+        image: hyperpilot/hyperpilot-operator
+        ports:
+        - containerPort: 7776
+          hostPort: 7776
