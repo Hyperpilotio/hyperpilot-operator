@@ -13,15 +13,15 @@ import (
 
 type DeploymentInformer struct {
 	indexInformer cache.SharedIndexInformer
-	hpc           *HyperpilotOpertor
+	processor     EventProcessor
 	mutex         sync.Mutex
 	queuedEvents  []*DeploymentEvent
 	initializing  bool
 }
 
-func InitDeploymentInformer(kclient *kubernetes.Clientset, hpc *HyperpilotOpertor) *DeploymentInformer {
+func InitDeploymentInformer(kclient *kubernetes.Clientset, processor EventProcessor) *DeploymentInformer {
 	di := &DeploymentInformer{
-		hpc:          hpc,
+		processor:    processor,
 		queuedEvents: []*DeploymentEvent{},
 		initializing: true,
 	}
@@ -60,13 +60,8 @@ func (d *DeploymentInformer) onOperatorReady() {
 	defer d.mutex.Unlock()
 
 	if len(d.queuedEvents) > 0 {
-
 		for _, e := range d.queuedEvents {
-			e.UpdateGlobalStatus(d.hpc)
-
-			for _, ctr := range d.hpc.deployRegisters {
-				go ctr.Receive(e)
-			}
+			d.processor.ProcessDeployment(e)
 		}
 	}
 	// Clear queued events queue
@@ -75,17 +70,7 @@ func (d *DeploymentInformer) onOperatorReady() {
 	d.initializing = false
 }
 
-func (d *DeploymentInformer) onAdd(i interface{}) {
-	deployObj := i.(*v1beta1.Deployment)
-
-	e := &DeploymentEvent{
-		ResourceEvent: ResourceEvent{
-			Event_type: ADD,
-		},
-		Cur: deployObj,
-		Old: nil,
-	}
-
+func (d *DeploymentInformer) handleEvent(e *DeploymentEvent) {
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
 	if d.initializing {
@@ -93,11 +78,21 @@ func (d *DeploymentInformer) onAdd(i interface{}) {
 		return
 	}
 
-	e.UpdateGlobalStatus(d.hpc)
+	d.processor.ProcessDeployment(e)
+}
 
-	for _, ctr := range d.hpc.deployRegisters {
-		go ctr.Receive(e)
+func (d *DeploymentInformer) onAdd(i interface{}) {
+	deployObj := i.(*v1beta1.Deployment)
+
+	e := &DeploymentEvent{
+		ResourceEvent: ResourceEvent{
+			EventType: ADD,
+		},
+		Cur: deployObj,
+		Old: nil,
 	}
+
+	d.handleEvent(e)
 }
 
 func (d *DeploymentInformer) onUpdate(i1 interface{}, i2 interface{}) {
@@ -106,24 +101,13 @@ func (d *DeploymentInformer) onUpdate(i1 interface{}, i2 interface{}) {
 
 	e := &DeploymentEvent{
 		ResourceEvent: ResourceEvent{
-			Event_type: UPDATE,
+			EventType: UPDATE,
 		},
 		Cur: cur,
 		Old: old,
 	}
 
-	d.mutex.Lock()
-	defer d.mutex.Unlock()
-	if d.initializing {
-		d.queuedEvents = append(d.queuedEvents, e)
-		return
-	}
-	e.UpdateGlobalStatus(d.hpc)
-
-	for _, ctr := range d.hpc.deployRegisters {
-		go ctr.Receive(e)
-	}
-
+	d.handleEvent(e)
 }
 
 func (d *DeploymentInformer) onDelete(cur interface{}) {
@@ -131,22 +115,11 @@ func (d *DeploymentInformer) onDelete(cur interface{}) {
 
 	e := &DeploymentEvent{
 		ResourceEvent: ResourceEvent{
-			Event_type: DELETE,
+			EventType: DELETE,
 		},
 		Cur: deployObj,
 		Old: nil,
 	}
 
-	d.mutex.Lock()
-	defer d.mutex.Unlock()
-	if d.initializing {
-		d.queuedEvents = append(d.queuedEvents, e)
-		return
-	}
-	e.UpdateGlobalStatus(d.hpc)
-
-	for _, ctr := range d.hpc.deployRegisters {
-		go ctr.Receive(e)
-	}
-
+	d.handleEvent(e)
 }

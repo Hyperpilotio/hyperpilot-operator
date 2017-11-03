@@ -14,15 +14,15 @@ import (
 
 type PodInformer struct {
 	indexInformer cache.SharedIndexInformer
-	hpc           *HyperpilotOpertor
+	processor     EventProcessor
 	mutex         sync.Mutex
 	queuedEvents  []*PodEvent
 	initializing  bool
 }
 
-func InitPodInformer(kclient *kubernetes.Clientset, hpc *HyperpilotOpertor) *PodInformer {
+func InitPodInformer(kclient *kubernetes.Clientset, processor EventProcessor) *PodInformer {
 	pi := &PodInformer{
-		hpc:          hpc,
+		processor:    processor,
 		queuedEvents: []*PodEvent{},
 		initializing: true,
 	}
@@ -62,13 +62,8 @@ func (pi *PodInformer) onOperatorReady() {
 	defer pi.mutex.Unlock()
 
 	if len(pi.queuedEvents) > 0 {
-
 		for _, e := range pi.queuedEvents {
-			e.UpdateGlobalStatus(pi.hpc)
-
-			for _, ctr := range pi.hpc.podRegisters {
-				go ctr.Receive(e)
-			}
+			pi.processor.ProcessPod(e)
 		}
 	}
 	// Clear queued events queue
@@ -77,17 +72,7 @@ func (pi *PodInformer) onOperatorReady() {
 	pi.initializing = false
 }
 
-func (pi *PodInformer) onAdd(cur1 interface{}) {
-	podObj := cur1.(*v1.Pod)
-
-	e := &PodEvent{
-		ResourceEvent: ResourceEvent{
-			Event_type: ADD,
-		},
-		Cur: podObj,
-		Old: nil,
-	}
-
+func (pi *PodInformer) handleEvent(e *PodEvent) {
 	pi.mutex.Lock()
 	defer pi.mutex.Unlock()
 	if pi.initializing {
@@ -95,11 +80,21 @@ func (pi *PodInformer) onAdd(cur1 interface{}) {
 		return
 	}
 
-	e.UpdateGlobalStatus(pi.hpc)
+	pi.processor.ProcessPod(e)
+}
 
-	for _, ctr := range pi.hpc.podRegisters {
-		go ctr.Receive(e)
+func (pi *PodInformer) onAdd(cur1 interface{}) {
+	podObj := cur1.(*v1.Pod)
+
+	e := &PodEvent{
+		ResourceEvent: ResourceEvent{
+			EventType: ADD,
+		},
+		Cur: podObj,
+		Old: nil,
 	}
+
+	pi.handleEvent(e)
 }
 
 func (pi *PodInformer) onDelete(cur interface{}) {
@@ -107,24 +102,13 @@ func (pi *PodInformer) onDelete(cur interface{}) {
 
 	e := &PodEvent{
 		ResourceEvent: ResourceEvent{
-			Event_type: DELETE,
+			EventType: DELETE,
 		},
 		Cur: podObj,
 		Old: nil,
 	}
 
-	pi.mutex.Lock()
-	defer pi.mutex.Unlock()
-	if pi.initializing {
-		pi.queuedEvents = append(pi.queuedEvents, e)
-		return
-	}
-	e.UpdateGlobalStatus(pi.hpc)
-
-	for _, ctr := range pi.hpc.podRegisters {
-		go ctr.Receive(e)
-	}
-
+	pi.handleEvent(e)
 }
 
 func (pi *PodInformer) onUpdate(old, cur interface{}) {
@@ -133,21 +117,11 @@ func (pi *PodInformer) onUpdate(old, cur interface{}) {
 
 	e := &PodEvent{
 		ResourceEvent: ResourceEvent{
-			Event_type: UPDATE,
+			EventType: UPDATE,
 		},
 		Old: oldObj,
 		Cur: curObj,
 	}
 
-	pi.mutex.Lock()
-	defer pi.mutex.Unlock()
-	if pi.initializing {
-		pi.queuedEvents = append(pi.queuedEvents, e)
-		return
-	}
-	e.UpdateGlobalStatus(pi.hpc)
-
-	for _, ctr := range pi.hpc.podRegisters {
-		go ctr.Receive(e)
-	}
+	pi.handleEvent(e)
 }

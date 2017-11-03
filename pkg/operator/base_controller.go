@@ -14,11 +14,7 @@ func (this ResourceEnum) IsRegistered(flag ResourceEnum) bool {
 }
 
 type BaseController interface {
-	Init(opertor *HyperpilotOpertor) error
-	Receive(e Event)
+	Init(operator *HyperpilotOperator) error
 	GetResourceEnum() ResourceEnum
 	Close()
-}
-
-type TaskController struct {
 }

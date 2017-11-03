@@ -2,9 +2,10 @@ package operator
 
 import (
 	"fmt"
-	"github.com/hyperpilotio/hyperpilot-operator/pkg/snap"
 	"log"
 	"strings"
+
+	"github.com/hyperpilotio/hyperpilot-operator/pkg/snap"
 )
 
 type SnapNodeInfo struct {
@@ -19,13 +20,11 @@ type SnapNodeInfo struct {
 }
 
 type SnapTaskController struct {
-	TaskController
-
 	ServiceList []string
 	Nodes       map[string]*SnapNodeInfo
 }
 
-func NewSnapTaskController() BaseController {
+func NewSnapTaskController() *SnapTaskController {
 	return &SnapTaskController{
 		ServiceList: []string{
 			"resource-worker",
@@ -78,7 +77,7 @@ func (s *SnapTaskController) reconcileSnapState() {
 	}
 }
 
-func (s *SnapTaskController) Init(opertor *HyperpilotOpertor) error {
+func (s *SnapTaskController) Init(opertor *HyperpilotOperator) error {
 
 	/* 1. Get all snap pods for each node, and create SnapClient for each snap
 	//for _, p := range opertor.pods {
@@ -147,30 +146,10 @@ func (s *SnapTaskController) getServicePodNameFromSnapTask(taskname string) stri
 
 func (s *SnapTaskController) Receive(e Event) {
 
-	_, ok := e.(*PodEvent)
-	if ok {
-		s.ProcessPod(e.(*PodEvent))
-	}
-
-	_, ok = e.(*DeploymentEvent)
-	if ok {
-		s.ProcessDeployment(e.(*DeploymentEvent))
-	}
-
-	_, ok = e.(*DaemonSetEvent)
-	if ok {
-		s.ProcessDaemonSet(e.(*DaemonSetEvent))
-	}
-
-	_, ok = e.(*NodeEvent)
-	if ok {
-		s.ProcessNode(e.(*NodeEvent))
-	}
-
 }
 
 func (s *SnapTaskController) ProcessNode(e *NodeEvent) {
-	switch e.Event_type {
+	switch e.EventType {
 	case ADD:
 	case DELETE:
 	case UPDATE:
@@ -184,7 +163,7 @@ func (s *SnapTaskController) String() string {
 func (s *SnapTaskController) ProcessPod(e *PodEvent) {
 	nodeInfo := s.Nodes[e.Cur.Spec.NodeName]
 
-	switch e.Event_type {
+	switch e.EventType {
 	case ADD:
 	case DELETE:
 		// delete pod from nodeInfo.RunningServicePods
@@ -241,7 +220,7 @@ func (s *SnapTaskController) ProcessPod(e *PodEvent) {
 }
 
 func (s *SnapTaskController) ProcessDeployment(e *DeploymentEvent) {
-	switch e.Event_type {
+	switch e.EventType {
 	case ADD:
 	case DELETE:
 	case UPDATE:
@@ -249,7 +228,7 @@ func (s *SnapTaskController) ProcessDeployment(e *DeploymentEvent) {
 }
 
 func (s *SnapTaskController) ProcessDaemonSet(e *DaemonSetEvent) {
-	switch e.Event_type {
+	switch e.EventType {
 	case ADD:
 	case DELETE:
 	case UPDATE:

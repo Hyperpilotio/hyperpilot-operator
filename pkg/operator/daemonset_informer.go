@@ -14,15 +14,15 @@ import (
 
 type DaemonSetInformer struct {
 	indexInformer cache.SharedIndexInformer
-	hpc           *HyperpilotOpertor
+	processor     EventProcessor
 	mutex         sync.Mutex
 	queuedEvents  []*DaemonSetEvent
 	initializing  bool
 }
 
-func InitDaemonSetInformer(kclient *kubernetes.Clientset, hpc *HyperpilotOpertor) *DaemonSetInformer {
+func InitDaemonSetInformer(kclient *kubernetes.Clientset, processor EventProcessor) *DaemonSetInformer {
 	dsi := &DaemonSetInformer{
-		hpc:          hpc,
+		processor:    processor,
 		queuedEvents: []*DaemonSetEvent{},
 		initializing: true,
 	}
@@ -62,13 +62,8 @@ func (d *DaemonSetInformer) onOperatorReady() {
 	defer d.mutex.Unlock()
 
 	if len(d.queuedEvents) > 0 {
-
 		for _, e := range d.queuedEvents {
-			e.UpdateGlobalStatus(d.hpc)
-
-			for _, ctr := range d.hpc.daemonSetRegisters {
-				go ctr.Receive(e)
-			}
+			d.processor.ProcessDaemonSet(e)
 		}
 	}
 	// Clear queued events queue
@@ -77,28 +72,30 @@ func (d *DaemonSetInformer) onOperatorReady() {
 	d.initializing = false
 }
 
+func (d *DaemonSetInformer) handleEvent(e *DaemonSetEvent) {
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+
+	if d.initializing {
+		d.queuedEvents = append(d.queuedEvents, e)
+		return
+	}
+
+	d.processor.ProcessDaemonSet(e)
+}
+
 func (d *DaemonSetInformer) onAdd(i interface{}) {
 	ds := i.(*v1beta1.DaemonSet)
 
 	e := &DaemonSetEvent{
 		ResourceEvent: ResourceEvent{
-			Event_type: ADD,
+			EventType: ADD,
 		},
 		Cur: ds,
 		Old: nil,
 	}
 
-	d.mutex.Lock()
-	defer d.mutex.Unlock()
-	if d.initializing {
-		d.queuedEvents = append(d.queuedEvents, e)
-		return
-	}
-	e.UpdateGlobalStatus(d.hpc)
-
-	for _, ctr := range d.hpc.daemonSetRegisters {
-		go ctr.Receive(e)
-	}
+	d.handleEvent(e)
 }
 
 func (d *DaemonSetInformer) onDelete(i interface{}) {
@@ -106,23 +103,13 @@ func (d *DaemonSetInformer) onDelete(i interface{}) {
 
 	e := &DaemonSetEvent{
 		ResourceEvent: ResourceEvent{
-			Event_type: DELETE,
+			EventType: DELETE,
 		},
 		Cur: ds,
 		Old: nil,
 	}
 
-	d.mutex.Lock()
-	defer d.mutex.Unlock()
-	if d.initializing {
-		d.queuedEvents = append(d.queuedEvents, e)
-		return
-	}
-	e.UpdateGlobalStatus(d.hpc)
-
-	for _, ctr := range d.hpc.daemonSetRegisters {
-		go ctr.Receive(e)
-	}
+	d.handleEvent(e)
 }
 
 func (d *DaemonSetInformer) onUpdate(i, j interface{}) {
@@ -131,21 +118,11 @@ func (d *DaemonSetInformer) onUpdate(i, j interface{}) {
 
 	e := &DaemonSetEvent{
 		ResourceEvent: ResourceEvent{
-			Event_type: UPDATE,
+			EventType: UPDATE,
 		},
 		Cur: cur,
 		Old: old,
 	}
 
-	d.mutex.Lock()
-	defer d.mutex.Unlock()
-	if d.initializing {
-		d.queuedEvents = append(d.queuedEvents, e)
-		return
-	}
-	e.UpdateGlobalStatus(d.hpc)
-
-	for _, ctr := range d.hpc.daemonSetRegisters {
-		go ctr.Receive(e)
-	}
+	d.handleEvent(e)
 }
