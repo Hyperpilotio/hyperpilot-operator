@@ -9,7 +9,7 @@ import (
 	"github.com/hyperpilotio/hyperpilot-operator/pkg/snap"
 )
 
-type SnapPodInfo struct {
+type ServicePodInfo struct {
 	Namespace string
 	Port      int32
 }
@@ -23,7 +23,7 @@ type SnapNodeInfo struct {
 	SnapTasks map[string]string
 
 	// servicePodName <-> pod info
-	RunningServicePods map[string]SnapPodInfo
+	RunningServicePods map[string]ServicePodInfo
 }
 
 type SnapTaskController struct {
@@ -117,7 +117,7 @@ func (s *SnapTaskController) Init(operator *HyperpilotOperator) error {
 		s.Nodes[n.NodeName] = &SnapNodeInfo{
 			NodeId:             n.NodeName,
 			ExternalIP:         n.ExternalIP,
-			RunningServicePods: make(map[string]SnapPodInfo),
+			RunningServicePods: make(map[string]ServicePodInfo),
 			SnapTasks:          make(map[string]string),
 			SnapClient:         nil,
 		}
@@ -168,7 +168,7 @@ func (s *SnapTaskController) Init(operator *HyperpilotOperator) error {
 				// TODO: How do we know which container has the right port? and which port?
 				container := p.Spec.Containers[0]
 				if len(container.Ports) > 0 {
-					s.Nodes[p.Spec.NodeName].RunningServicePods[p.Name] = SnapPodInfo{
+					s.Nodes[p.Spec.NodeName].RunningServicePods[p.Name] = ServicePodInfo{
 						Namespace: p.Namespace,
 						Port:      container.Ports[0].HostPort,
 					}
@@ -228,9 +228,10 @@ func (s *SnapTaskController) ProcessPod(e *PodEvent) {
 			// Check if it's running and is part of a service we're looking for
 			for _, service := range s.ServiceList {
 				if strings.HasPrefix(e.Cur.Name, service) {
-					nodeInfo.RunningServicePods[e.Cur.Name] = SnapPodInfo{
+					container := e.Cur.Spec.Containers[0]
+					nodeInfo.RunningServicePods[e.Cur.Name] = ServicePodInfo{
 						Namespace: e.Cur.Namespace,
-						Port:      e.Cur.Spec.Containers[0].Ports[0].HostPort,
+						Port:      container.Ports[0].HostPort,
 					}
 					if s.reconcileSnapState() == false {
 						delete(nodeInfo.RunningServicePods, e.Cur.Name)
@@ -269,6 +270,7 @@ func (s *SnapTaskController) ProcessPod(e *PodEvent) {
 					// Do Initialize Step 3 when snap pod start
 					nodeInfo.SnapClient = taskmanager
 					tasks := nodeInfo.SnapClient.GetTasks()
+					// //todo: snap is not ready yet
 
 					for _, task := range tasks.ScheduledTasks {
 						servicePodName := s.getServicePodNameFromSnapTask(task.Name)

@@ -200,7 +200,8 @@ func (c *HyperpilotOperator) Run(stopCh <-chan struct{}) error {
 	}
 
 	for _, p := range pods.Items {
-		c.pods[p.Name] = &p
+		pod := p
+		c.pods[pod.Name] = &pod
 	}
 
 	// 3. Initialize controllers
