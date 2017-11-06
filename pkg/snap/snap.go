@@ -13,7 +13,6 @@ const (
 	PROMETHEUS_TASK_NAME_PREFIX = "PROMETHEUS"
 )
 
-
 type Plugin struct {
 	Name string
 	typ  string
@@ -46,17 +45,17 @@ func NewTaskManager(podIP string) (*TaskManager, error) {
 	}
 
 	return &TaskManager{
-		Client: snapClient,
+		Client:  snapClient,
 		plugins: NewPrometheusPluginsList(),
 	}, nil
 }
 
 // todo: define task required plugins
-func NewPrometheusPluginsList() []*Plugin{
+func NewPrometheusPluginsList() []*Plugin {
 	return []*Plugin{
-		{"cpu", "collector", 7},
-		{"file", "publisher", 2},
-		{"tag", "processor", 3},
+		//{"cpu", "collector", 6},
+		{"influxdb", "publisher", 22},
+		//{"tag", "processor", 3},
 	}
 }
 
@@ -121,8 +120,8 @@ func (manager *TaskManager) isPluginLoaded(plugin *Plugin) bool {
 	return true
 }
 
-func (manager *TaskManager) IsReady () bool {
-	for _, p := range  manager.plugins {
+func (manager *TaskManager) IsReady() bool {
+	for _, p := range manager.plugins {
 		if manager.isPluginLoaded(p) == false {
 			return false
 		}
