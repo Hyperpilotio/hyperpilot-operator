@@ -13,6 +13,13 @@ const (
 	PROMETHEUS_TASK_NAME_PREFIX = "PROMETHEUS"
 )
 
+
+type Plugin struct {
+	Name string
+	typ  string
+	ver  int
+}
+
 type RunOpts struct {
 	ScheduleType      string
 	ScheduleInterval  string
@@ -22,6 +29,7 @@ type RunOpts struct {
 
 type TaskManager struct {
 	*client.Client
+	plugins []*Plugin
 }
 
 type Task struct {
@@ -39,7 +47,17 @@ func NewTaskManager(podIP string) (*TaskManager, error) {
 
 	return &TaskManager{
 		Client: snapClient,
+		plugins: NewPrometheusPluginsList(),
 	}, nil
+}
+
+// todo: define task required plugins
+func NewPrometheusPluginsList() []*Plugin{
+	return []*Plugin{
+		{"cpu", "collector", 7},
+		{"file", "publisher", 2},
+		{"tag", "processor", 3},
+	}
 }
 
 func NewPrometheusCollectorTask(podName string, namespace string, port int32) *Task {
@@ -93,4 +111,21 @@ func (manager *TaskManager) CreateTask(task *Task) (string, error) {
 		return result.ID, nil
 	}
 	return "", errors.New("Create Task Failed: " + result.Err.Error())
+}
+
+func (manager *TaskManager) isPluginLoaded(plugin *Plugin) bool {
+	r := manager.GetPlugin(plugin.typ, plugin.Name, plugin.ver)
+	if r.Err != nil {
+		return false
+	}
+	return true
+}
+
+func (manager *TaskManager) IsReady () bool {
+	for _, p := range  manager.plugins {
+		if manager.isPluginLoaded(p) == false {
+			return false
+		}
+	}
+	return true
 }
