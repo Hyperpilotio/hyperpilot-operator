@@ -10,10 +10,9 @@ import (
 	"k8s.io/client-go/pkg/api/v1"
 )
 
-//const K8SEVENT = "K8SEVENT"
 
 const (
-	HYPERPILOT_OPERATOR_NS = "hyperpilot"
+	HYPERPILOT_OPERATOR_NS = ""
 
 	// Operator states
 	OPERATOR_NOT_RUNNING              = -1
@@ -158,7 +157,7 @@ func (c *HyperpilotOperator) ProcessPod(e *PodEvent) {
 		if e.Old.Status.Phase == "Pending" && e.Cur.Status.Phase == "Running" {
 			c.pods[e.Cur.Name] = e.Cur
 
-			log.Printf("[ operator ] Insert NEW Pod {%s}", c.pods[e.Cur.Name])
+			log.Printf("[ operator ] Insert NEW Pod {%s}", e.Cur.Name)
 		}
 	}
 

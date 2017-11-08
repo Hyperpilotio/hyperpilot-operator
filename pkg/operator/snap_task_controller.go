@@ -69,6 +69,7 @@ func (node *SnapNode) reconcileSnapState() error {
 				return err
 			}
 			node.SnapTasks[servicePodName] = task.Name
+			log.Printf("Create task {%s} in Node {%s}", task.Name, node.NodeId)
 		}
 	}
 
@@ -84,6 +85,7 @@ func (node *SnapNode) reconcileSnapState() error {
 			node.TaskManager.StopAndRemoveTask(taskId)
 			// TODO: Check result!
 			delete(node.SnapTasks, servicePodName)
+			log.Printf("Delete task {%s} in Node {%s}", taskName, node.NodeId)
 		}
 	}
 
@@ -94,31 +96,31 @@ func (n *SnapNode) Run(isOutsideCluster bool) {
 	go func() {
 		for e := range n.PodEvents {
 			switch e.EventType {
-			case ADD:
+			case ADD, UPDATE:
+				// Check if it's running and is part of a service we're looking for
+				container := e.Cur.Spec.Containers[0]
+				n.RunningServicePods[e.Cur.Name] = ServicePodInfo{
+					Namespace: e.Cur.Namespace,
+					Port:      container.Ports[0].HostPort,
+				}
+				if err := n.reconcileSnapState(); err != nil {
+					log.Printf("Unable to reconcile snap state: %s", err.Error())
+					return
+				}
+
+				log.Printf("[ Controller ] Insert Pod {%s}", e.Cur.Name)
+
 			case DELETE:
 				if _, ok := n.RunningServicePods[e.Cur.Name]; ok {
 					// delete pod from nodeInfo.RunningServicePods
 					delete(n.RunningServicePods, e.Cur.Name)
-					n.reconcileSnapState()
+					if err := n.reconcileSnapState(); err != nil {
+						log.Printf("Unable to reconcile snap state: %s", err.Error())
+						return
+					}
 					log.Printf("[ Controller ] Delete Pod {%s}", e.Cur.Name)
 				} else {
 					log.Printf("Unable to find and delete service pod {%s} in running tasks!", e.Cur.Name)
-				}
-
-			case UPDATE:
-				// Only check scheduled pods
-				if e.Old.Status.Phase == "Pending" && e.Cur.Status.Phase == "Running" {
-					// Check if it's running and is part of a service we're looking for
-					container := e.Cur.Spec.Containers[0]
-					n.RunningServicePods[e.Cur.Name] = ServicePodInfo{
-						Namespace: e.Cur.Namespace,
-						Port:      container.Ports[0].HostPort,
-					}
-					if err := n.reconcileSnapState(); err != nil {
-						log.Printf("Unable to reconcile snap state: %s", err.Error())
-					}
-
-					log.Printf("[ Controller ] Insert Pod {%s}", e.Cur.Name)
 				}
 			}
 		}
@@ -162,6 +164,7 @@ func (s *SnapTaskController) Init(operator *HyperpilotOperator) error {
 			RunningServicePods: make(map[string]ServicePodInfo),
 			SnapTasks:          make(map[string]string),
 			TaskManager:        nil,
+			PodEvents:          make(chan *PodEvent),
 		}
 		init, err := snapNode.init(s.isOutsideCluster, operator)
 		if !init {
@@ -191,48 +194,7 @@ func (s *SnapTaskController) Init(operator *HyperpilotOperator) error {
 	}
 
 	s.printOut()
-
 	return nil
-
-	// 2. If possible, find snap pod for each node
-	//     if snap exist, create TaskManager
-	//     if snap no exist, leave it nil
-
-	//for _, p := range operator.pods {
-	//	if strings.HasPrefix(p.Name, "snap-") {
-	//if s.Nodes[p.Spec.NodeName].TaskManager == nil {
-	//	var taskmanager *snap.TaskManager
-	//	var err error
-	//	if s.isOutsideCluster {
-	//		// If run outside cluster, task manager communicate with snap with snap HOST IP
-	//		taskmanager, err = snap.NewTaskManager(s.Nodes[p.Spec.NodeName].ExternalIP)
-	//	} else {
-	//		// if inside k8s cluster, task manager communicate with snap with snap POD ip
-	//		taskmanager, err = snap.NewTaskManager(p.Status.PodIP)
-	//	}
-	//
-	//	if err != nil {
-	//		log.Printf("Failed to create Snap Task Manager: " + err.Error())
-	//	}
-	//	s.Nodes[p.Spec.NodeName].TaskManager = taskmanager
-	//}
-	//	}
-	//}
-
-	// 3. Get all running tasks from Snap API for existing snap pod
-	//for _, node := range s.Nodes {
-	//	if node.TaskManager != nil {
-	//		tasks := node.TaskManager.GetTasks()
-	//		for _, task := range tasks.ScheduledTasks {
-	//			// only look for task which controller care about
-	//			if s.isSnapControllerTask(task.Name) {
-	//				servicePodName := s.getServicePodNameFromSnapTask(task.Name)
-	//				node.SnapTasks[servicePodName] = task.Name
-	//			}
-	//		}
-	//	}
-	//}
-
 }
 
 func (n *SnapNode) initSnap(isOutsideCluster bool, snapPod *v1.Pod) error {
@@ -253,12 +215,11 @@ func (n *SnapNode) initSnap(isOutsideCluster bool, snapPod *v1.Pod) error {
 	n.TaskManager = taskManager
 
 	for !taskManager.IsReady() {
-		//todo: timeout
 		log.Println("wait for Snap Task Manager Load plugin complete")
-		//fmt.Println("wait for Snap Task Manager Load plugin complete")
 		time.Sleep(time.Second * 10)
 		// TODO: Wait until a limit before we throw error
 	}
+	log.Printf("Plugin Load Complete")
 
 	// Get all running tasks from Snap API for existing snap pod
 	tasks := taskManager.GetTasks()
@@ -337,36 +298,60 @@ func (s *SnapTaskController) isServicePod(pod *v1.Pod) bool {
 }
 
 func (s *SnapTaskController) ProcessPod(e *PodEvent) {
-	// process snap separately
-	// If this is a snap pod, we need to update the snap client to point to the new Snap
+	// For ADD and DELETE event, just put into node.PodEvents
+	// For Update, have to  check  Old.Status == "Pending" && Cur.Status == "Running"
+	switch e.EventType {
+	case ADD:
+		log.Printf("ADD in ProcessedPod")
+		if e.Cur.Status.Phase =="Running" {
+			nodeName := e.Cur.Spec.NodeName
+			node, ok := s.Nodes[nodeName]
+			if !ok {
+				log.Printf("Received an unknown node from pod ADD event: %s", nodeName)
+				return
+			}
 
-	nodeName := e.Cur.Spec.NodeName
-	node, ok := s.Nodes[nodeName]
-	if !ok {
-		log.Printf("Received an unknown node from pod event: %s", nodeName)
-		return
-	}
+			if s.isServicePod(e.Cur) {
+				node.PodEvents <- e
+			}
+		}
+	case DELETE:
+		log.Printf("DELETE in ProcessedPod")
 
-	if strings.HasPrefix(e.Cur.Name, "snap-") {
-		switch e.EventType {
-		case UPDATE:
-			if e.Old.Status.Phase == "Pending" && e.Cur.Status.Phase == "Running" {
+		nodeName := e.Cur.Spec.NodeName
+		node, ok := s.Nodes[nodeName]
+		if !ok {
+			log.Printf("Received an unknown node from DELETE pod event: %s", nodeName)
+			return
+		}
+		if s.isServicePod(e.Cur) {
+			node.PodEvents <- e
+		}
+	case UPDATE:
+		log.Printf("UPDATE in ProcessedPod")
 
+		if e.Old.Status.Phase == "Pending" && e.Cur.Status.Phase == "Running" {
+			nodeName := e.Cur.Spec.NodeName
+			node, ok := s.Nodes[nodeName]
+			if !ok {
+				log.Printf("Received an unknown node from pod UPDATE event: %s", nodeName)
+				return
+			}
+
+			if strings.HasPrefix(e.Cur.Name, "snap-") {
 				// TODO: Handle snap restart after running on an existing node.
 				if err := node.initSnap(s.isOutsideCluster, e.Cur); err != nil {
 					log.Printf("Unable to init snap during process pod for node %s: %s", nodeName, err.Error())
 				}
 				node.Run(s.isOutsideCluster)
+				return
+			}
+
+			if s.isServicePod(e.Cur) {
+				node.PodEvents <- e
 			}
 		}
-		return
 	}
-
-	// other event put into channel
-	if s.isServicePod(e.Cur) {
-		node.PodEvents <- e
-	}
-
 }
 
 func (s *SnapTaskController) ProcessDeployment(e *DeploymentEvent) {

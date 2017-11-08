@@ -50,12 +50,10 @@ func NewTaskManager(podIP string) (*TaskManager, error) {
 	}, nil
 }
 
-// todo: define task required plugins
 func NewPrometheusPluginsList() []*Plugin {
 	return []*Plugin{
-		//{"cpu", "collector", 6},
+		{"snap-plugin-collector-prometheus", "collector", 1},
 		{"influxdb", "publisher", 22},
-		//{"tag", "processor", 3},
 	}
 }
 
@@ -75,15 +73,10 @@ func NewPrometheusCollectorTask(podName string, namespace string, port int32) *T
 	}
 }
 
-// todo: define actual workflow
-// test workflow, install following plugin first
-// 	"snap-plugin-processor-tag_linux_x86_64",
-// 	"snap-plugin-publisher-file_linux_x86_64",
-// 	"snap-plugin-collector-cpu_linux_x86_64",
 func NewPrometheusCollectorWorkflowMap(podName string, namespace string, port int32) *wmap.WorkflowMap {
 	ns := "/hyperpilot/prometheus"
 	metrics := make(map[string]int)
-	metrics["/hyperpilot/prometheus/*"] = 1
+	metrics["/hyperpilot/prometheus/"] = 1
 	config := make(map[string]interface{})
 	config["endpoint"] = "http://" + podName + "." + namespace + ":" + strconv.Itoa(int(port))
 	collector := NewCollector(ns, metrics, config)
@@ -97,7 +90,7 @@ func NewPrometheusCollectorWorkflowMap(podName string, namespace string, port in
 	publisherConfig["password"] = "hyperpilot"
 	publisherConfig["https"] = false
 	publisherConfig["skip-verify"] = false
-	publisher := NewPublisher("influxdb", 2, publisherConfig)
+	publisher := NewPublisher("influxdb", 22, publisherConfig)
 
 	return publisher.JoinCollector(collector).Join(wmap.NewWorkflowMap())
 }
@@ -118,6 +111,11 @@ func (manager *TaskManager) isPluginLoaded(plugin *Plugin) bool {
 		return false
 	}
 	return true
+}
+
+func (manager *TaskManager) StopAndRemoveTask(taskId string) {
+	manager.StopTask(taskId)
+	manager.RemoveTask(taskId)
 }
 
 func (manager *TaskManager) IsReady() bool {
