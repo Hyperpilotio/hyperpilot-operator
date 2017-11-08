@@ -1,0 +1,54 @@
+{
+    "apiVersion": "apps\/v1beta1",
+    "kind": "StatefulSet",
+    "metadata": {
+      "name": "resource-worker"
+    },
+    "spec": {
+      "serviceName": "resource-worker",
+      "replicas": 3,
+      "template": {
+        "metadata": {
+          "labels": {
+            "app": "resource-worker"
+          }
+        },
+        "spec": {
+          "containers": [
+            {
+              "name": "resource-worker",
+              "imagePullPolicy": "Always",
+              "image": "ogre0403\/resource-worker",
+              "ports": [
+                {
+                  "containerPort": 7998,
+                  "hostPort": 7998,
+                  "protocol": "TCP"
+                }
+              ],
+              "volumeMounts": [
+                {
+                  "mountPath": "\/host_proc",
+                  "name": "procfs"
+                }
+              ],
+              "env": [
+                {
+                  "name": "HOST_PROC",
+                  "value": "\/host_proc"
+                }
+              ]
+            }
+          ],
+          "volumes": [
+            {
+              "name": "procfs",
+              "hostPath": {
+                "path": "\/proc"
+              }
+            }
+          ]
+        }
+      }
+    }
+}
