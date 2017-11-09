@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/hyperpilotio/hyperpilot-operator/pkg/operator"
+	hsnap "github.com/hyperpilotio/hyperpilot-operator/pkg/snap"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -36,7 +37,7 @@ func main() {
 	log.Printf("Starting operator...")
 
 	controllers := []operator.EventProcessor{}
-	controllers = append(controllers, operator.NewSnapTaskController(*runOutsideCluster))
+	controllers = append(controllers, hsnap.NewSnapTaskController(*runOutsideCluster))
 	hpc, err := operator.NewHyperpilotOperator(clientset, controllers)
 	if err != nil {
 		log.Printf("Unable to create hyperpilot operator: " + err.Error())

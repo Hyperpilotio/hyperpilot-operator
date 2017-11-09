@@ -3,6 +3,7 @@ package snap
 import (
 	"errors"
 	"strconv"
+	"time"
 
 	"github.com/intelsdi-x/snap/mgmt/rest/client"
 	"github.com/intelsdi-x/snap/scheduler/wmap"
@@ -97,12 +98,21 @@ func NewPrometheusCollectorWorkflowMap(podName string, namespace string, port in
 
 func (manager *TaskManager) CreateTask(task *Task) (string, error) {
 	sch := &client.Schedule{Type: task.Opts.ScheduleType, Interval: task.Opts.ScheduleInterval}
-	result := manager.Client.CreateTask(sch, task.WorkflowMap, task.Name, "", task.Opts.StartTaskOnCreate, task.Opts.MaxFailure)
+	var err error
 
-	if result.Err == nil {
-		return result.ID, nil
+	// Retry 5 times, TODO: Configurable
+	for i := 0; i < 5; i++ {
+		result := manager.Client.CreateTask(sch, task.WorkflowMap, task.Name, "", task.Opts.StartTaskOnCreate, task.Opts.MaxFailure)
+		if result.Err == nil {
+			return result.ID, nil
+		} else {
+			err = result.Err
+		}
+
+		time.Sleep(time.Second * 10)
 	}
-	return "", errors.New("Create Task Failed: " + result.Err.Error())
+
+	return "", errors.New("Create Task Failed: " + err.Error())
 }
 
 func (manager *TaskManager) isPluginLoaded(plugin *Plugin) bool {
