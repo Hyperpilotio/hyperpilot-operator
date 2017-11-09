@@ -92,7 +92,6 @@ func (node *SnapNode) reconcileSnapState() error {
 	return nil
 }
 
-
 //for each node {
 // Compare node.SnapTasks and RunningServicePods
 // If any pod in runningServicePods doesn't exist in SnapTasks value,
@@ -159,7 +158,7 @@ func (s *SnapTaskController) Init(operator *HyperpilotOperator) error {
 		}
 	}
 
-	s.printOut()
+	//s.printOut()
 	return nil
 }
 
@@ -267,12 +266,10 @@ func (s *SnapTaskController) ProcessPod(e *PodEvent) {
 	// For ADD and DELETE event, just put into node.PodEvents
 	// For Update, have to  check  Old.Status == "Pending" && Cur.Status == "Running"
 
-
 	//SNAP pod event handled first in PorcessPod, other push to separated channel
 	switch e.EventType {
 	case ADD:
-		log.Printf("ADD in ProcessedPod")
-		if e.Cur.Status.Phase =="Running" {
+		if e.Cur.Status.Phase == "Running" {
 			nodeName := e.Cur.Spec.NodeName
 			node, ok := s.Nodes[nodeName]
 			if !ok {
@@ -281,23 +278,21 @@ func (s *SnapTaskController) ProcessPod(e *PodEvent) {
 			}
 
 			if strings.HasPrefix(e.Cur.Name, "snap-") {
-
 				return
 			}
+
 			if s.isServicePod(e.Cur) {
 				node.PodEvents <- e
 			}
 		}
 	case DELETE:
-		log.Printf("DELETE in ProcessedPod")
-
 		nodeName := e.Cur.Spec.NodeName
 		node, ok := s.Nodes[nodeName]
 		if !ok {
 			log.Printf("Received an unknown node from DELETE pod event: %s", nodeName)
 			return
 		}
-		//todo: fix task not install after snap restart
+
 		if strings.HasPrefix(e.Cur.Name, "snap-") {
 			node.SnapTasks = make(map[string]string)
 			return
@@ -307,8 +302,6 @@ func (s *SnapTaskController) ProcessPod(e *PodEvent) {
 			node.PodEvents <- e
 		}
 	case UPDATE:
-		log.Printf("UPDATE in ProcessedPod")
-
 		if e.Old.Status.Phase == "Pending" && e.Cur.Status.Phase == "Running" {
 			nodeName := e.Cur.Spec.NodeName
 			node, ok := s.Nodes[nodeName]
@@ -318,7 +311,7 @@ func (s *SnapTaskController) ProcessPod(e *PodEvent) {
 			}
 
 			if strings.HasPrefix(e.Cur.Name, "snap-") {
-				// TODO: Handle snap restart after running on an existing node.
+				node.PodEvents = make(chan *PodEvent)
 				if err := node.initSnap(s.isOutsideCluster, e.Cur); err != nil {
 					log.Printf("Unable to init snap during process pod for node %s: %s", nodeName, err.Error())
 				}
