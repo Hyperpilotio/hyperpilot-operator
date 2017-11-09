@@ -40,7 +40,14 @@
     3. CHECK:  task is added to restart snap
 
 
-## Case 9:
+## Case 9 :
+    1. Snap are running ,  start operator, start resource-worker
+    2. 1 snap restart
+    3. TEST: remove resource worker
+    3. CHECK : all tasks  are  removed 
+    
+   
+## Case 10:
     1. Snap are running ,  start operator, no resource-worker
     2. TEST: when 1 snap restart, create 3 resource worker
     3. CHECK: 2 tasks are add immediately, 1 tasks added after snap plugin load
