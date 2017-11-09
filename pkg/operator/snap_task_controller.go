@@ -92,40 +92,6 @@ func (node *SnapNode) reconcileSnapState() error {
 	return nil
 }
 
-func (n *SnapNode) Run(isOutsideCluster bool) {
-	go func() {
-		for e := range n.PodEvents {
-			switch e.EventType {
-			case ADD, UPDATE:
-				// Check if it's running and is part of a service we're looking for
-				container := e.Cur.Spec.Containers[0]
-				n.RunningServicePods[e.Cur.Name] = ServicePodInfo{
-					Namespace: e.Cur.Namespace,
-					Port:      container.Ports[0].HostPort,
-				}
-				if err := n.reconcileSnapState(); err != nil {
-					log.Printf("Unable to reconcile snap state: %s", err.Error())
-					return
-				}
-
-				log.Printf("[ Controller ] Insert Pod {%s}", e.Cur.Name)
-
-			case DELETE:
-				if _, ok := n.RunningServicePods[e.Cur.Name]; ok {
-					// delete pod from nodeInfo.RunningServicePods
-					delete(n.RunningServicePods, e.Cur.Name)
-					if err := n.reconcileSnapState(); err != nil {
-						log.Printf("Unable to reconcile snap state: %s", err.Error())
-						return
-					}
-					log.Printf("[ Controller ] Delete Pod {%s}", e.Cur.Name)
-				} else {
-					log.Printf("Unable to find and delete service pod {%s} in running tasks!", e.Cur.Name)
-				}
-			}
-		}
-	}()
-}
 
 //for each node {
 // Compare node.SnapTasks and RunningServicePods
@@ -214,7 +180,7 @@ func (n *SnapNode) initSnap(isOutsideCluster bool, snapPod *v1.Pod) error {
 
 	n.TaskManager = taskManager
 
-	for !taskManager.IsReady() {
+	for !n.TaskManager.IsReady() {
 		log.Println("wait for Snap Task Manager Load plugin complete")
 		time.Sleep(time.Second * 10)
 		// TODO: Wait until a limit before we throw error
@@ -222,7 +188,7 @@ func (n *SnapNode) initSnap(isOutsideCluster bool, snapPod *v1.Pod) error {
 	log.Printf("Plugin Load Complete")
 
 	// Get all running tasks from Snap API for existing snap pod
-	tasks := taskManager.GetTasks()
+	tasks := n.TaskManager.GetTasks()
 	for _, task := range tasks.ScheduledTasks {
 		// only look for task which controller care about
 		if isSnapControllerTask(task.Name) {
@@ -300,6 +266,9 @@ func (s *SnapTaskController) isServicePod(pod *v1.Pod) bool {
 func (s *SnapTaskController) ProcessPod(e *PodEvent) {
 	// For ADD and DELETE event, just put into node.PodEvents
 	// For Update, have to  check  Old.Status == "Pending" && Cur.Status == "Running"
+
+
+	//SNAP pod event handled first in PorcessPod, other push to separated channel
 	switch e.EventType {
 	case ADD:
 		log.Printf("ADD in ProcessedPod")
@@ -311,6 +280,10 @@ func (s *SnapTaskController) ProcessPod(e *PodEvent) {
 				return
 			}
 
+			if strings.HasPrefix(e.Cur.Name, "snap-") {
+
+				return
+			}
 			if s.isServicePod(e.Cur) {
 				node.PodEvents <- e
 			}
@@ -324,6 +297,12 @@ func (s *SnapTaskController) ProcessPod(e *PodEvent) {
 			log.Printf("Received an unknown node from DELETE pod event: %s", nodeName)
 			return
 		}
+		//todo: fix task not install after snap restart
+		if strings.HasPrefix(e.Cur.Name, "snap-") {
+			node.SnapTasks = make(map[string]string)
+			return
+		}
+
 		if s.isServicePod(e.Cur) {
 			node.PodEvents <- e
 		}
@@ -352,6 +331,42 @@ func (s *SnapTaskController) ProcessPod(e *PodEvent) {
 			}
 		}
 	}
+}
+
+//only handle resource worker pod
+func (n *SnapNode) Run(isOutsideCluster bool) {
+	go func() {
+		for e := range n.PodEvents {
+			switch e.EventType {
+			case ADD, UPDATE:
+				// Check if it's running and is part of a service we're looking for
+				container := e.Cur.Spec.Containers[0]
+				n.RunningServicePods[e.Cur.Name] = ServicePodInfo{
+					Namespace: e.Cur.Namespace,
+					Port:      container.Ports[0].HostPort,
+				}
+				if err := n.reconcileSnapState(); err != nil {
+					log.Printf("Unable to reconcile snap state: %s", err.Error())
+					return
+				}
+
+				log.Printf("[ Controller ] Insert Pod {%s}", e.Cur.Name)
+
+			case DELETE:
+				if _, ok := n.RunningServicePods[e.Cur.Name]; ok {
+					// delete pod from nodeInfo.RunningServicePods
+					delete(n.RunningServicePods, e.Cur.Name)
+					if err := n.reconcileSnapState(); err != nil {
+						log.Printf("Unable to reconcile snap state: %s", err.Error())
+						return
+					}
+					log.Printf("[ Controller ] Delete Pod {%s}", e.Cur.Name)
+				} else {
+					log.Printf("Unable to find and delete service pod {%s} in running tasks!", e.Cur.Name)
+				}
+			}
+		}
+	}()
 }
 
 func (s *SnapTaskController) ProcessDeployment(e *DeploymentEvent) {

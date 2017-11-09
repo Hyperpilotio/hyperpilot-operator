@@ -1,10 +1,7 @@
 {
   "plugins": {
     "influxdb": "https://github.com/intelsdi-x/snap-plugin-publisher-influxdb/releases/download/22/snap-plugin-publisher-influxdb_linux_x86_64",
-    "docker": "https://hyperpilot-snap-collectors.s3.amazonaws.com/snap-plugin-collector-docker",
     "cpu": "https://github.com/intelsdi-x/snap-plugin-collector-cpu/releases/download/6/snap-plugin-collector-cpu_linux_x86_64",
-    "meminfo": "https://github.com/intelsdi-x/snap-plugin-collector-meminfo/releases/download/4/snap-plugin-collector-meminfo_linux_x86_64",
-    "diskinfo": "https://github.com/intelsdi-x/snap-plugin-collector-disk/releases/download/5/snap-plugin-collector-disk_linux_x86_64",
     "snap-plugin-collector-prometheus": "https://s3.us-east-2.amazonaws.com/jimmy-hyperpilot/snap-plugin-collector-prometheus",
     "snap-average-counter-processor": "https://s3.amazonaws.com/snap-tech-demo-files/snap-average-counter-processor"
   },
