@@ -15,9 +15,9 @@ const (
 )
 
 type Plugin struct {
-	Name string
-	typ  string
-	ver  int
+	Name    string
+	Type    string
+	Version int
 }
 
 type RunOpts struct {
@@ -116,16 +116,23 @@ func (manager *TaskManager) CreateTask(task *Task) (string, error) {
 }
 
 func (manager *TaskManager) isPluginLoaded(plugin *Plugin) bool {
-	r := manager.GetPlugin(plugin.typ, plugin.Name, plugin.ver)
+	r := manager.GetPlugin(plugin.Type, plugin.Name, plugin.Version)
 	if r.Err != nil {
 		return false
 	}
 	return true
 }
 
-func (manager *TaskManager) StopAndRemoveTask(taskId string) {
-	manager.StopTask(taskId)
-	manager.RemoveTask(taskId)
+func (manager *TaskManager) StopAndRemoveTask(taskId string) error {
+	if r1 := manager.StopTask(taskId); r1.Err != nil {
+		return r1.Err
+	}
+
+	if r2 := manager.RemoveTask(taskId); r2.Err != nil {
+		return r2.Err
+	}
+
+	return nil
 }
 
 func (manager *TaskManager) IsReady() bool {
