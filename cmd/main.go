@@ -10,11 +10,10 @@ import (
 
 	"github.com/hyperpilotio/hyperpilot-operator/pkg/operator"
 	hsnap "github.com/hyperpilotio/hyperpilot-operator/pkg/snap"
+	"github.com/spf13/viper"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 )
-
-var runOutsideCluster *bool
 
 func main() {
 	// Set logging output to standard console out
@@ -25,6 +24,7 @@ func main() {
 
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM, syscall.SIGINT) // Register the sigs channel to receieve SIGTERM
 	runOutsideCluster := flag.Bool("run-outside-cluster", false, "Set this flag when running outside of the cluster.")
+	configPath := flag.String("config", "", "The file path to a config file")
 
 	flag.Parse()
 
@@ -34,11 +34,17 @@ func main() {
 		log.Fatalf("Unable to create clientset: %s", err.Error())
 	}
 
+	config, err := ReadConfig(*configPath)
+	if err != nil {
+		log.Fatalf("Unable to read configure file: %s", err.Error())
+
+	}
+
 	log.Printf("Starting operator...")
 
 	controllers := []operator.EventProcessor{}
-	controllers = append(controllers, hsnap.NewSnapTaskController(*runOutsideCluster))
-	hpc, err := operator.NewHyperpilotOperator(clientset, controllers)
+	controllers = append(controllers, hsnap.NewSnapTaskController(*runOutsideCluster, config))
+	hpc, err := operator.NewHyperpilotOperator(clientset, controllers, config)
 	if err != nil {
 		log.Printf("Unable to create hyperpilot operator: " + err.Error())
 		return
@@ -81,4 +87,24 @@ func newClientSet(runOutsideCluster bool) (*kubernetes.Clientset, error) {
 	}
 
 	return kubernetes.NewForConfig(config)
+}
+
+func ReadConfig(fileConfig string) (*viper.Viper, error) {
+	viper := viper.New()
+	viper.SetConfigType("json")
+
+	if fileConfig == "" {
+		viper.SetConfigName("operator_config")
+		viper.AddConfigPath("/etc/operator")
+	} else {
+		viper.SetConfigFile(fileConfig)
+	}
+
+	viper.SetDefault("SnapTaskController.CreateTaskRetry", 5)
+
+	err := viper.ReadInConfig()
+	if err != nil {
+		return nil, err
+	}
+	return viper, nil
 }

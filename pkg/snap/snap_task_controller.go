@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/hyperpilotio/hyperpilot-operator/pkg/operator"
+	"github.com/spf13/viper"
 	"k8s.io/client-go/pkg/api/v1"
 )
 
@@ -25,6 +26,7 @@ type SnapNode struct {
 	PodEvents          chan *operator.PodEvent
 	ExitChan           chan bool
 	ServiceList        []string
+	config             *viper.Viper
 }
 
 type SnapTaskController struct {
@@ -32,16 +34,15 @@ type SnapTaskController struct {
 	ServiceList      []string
 	Nodes            map[string]*SnapNode
 	ClusterState     *operator.ClusterState
+	config           *viper.Viper
 }
 
-func NewSnapTaskController(runOutsideCluster bool) *SnapTaskController {
+func NewSnapTaskController(runOutsideCluster bool, config *viper.Viper) *SnapTaskController {
 	return &SnapTaskController{
-		ServiceList: []string{
-			//There will be other type in the future
-			"resource-worker",
-		},
+		ServiceList:      config.GetStringSlice("SnapTaskController.ServiceList"),
 		Nodes:            map[string]*SnapNode{},
 		isOutsideCluster: runOutsideCluster,
+		config:           config,
 	}
 }
 
@@ -58,8 +59,8 @@ func (node *SnapNode) reconcileSnapState() error {
 	for servicePodName, podInfo := range node.RunningServicePods {
 		_, ok := node.SnapTasks[servicePodName]
 		if !ok {
-			task := NewPrometheusCollectorTask(servicePodName, podInfo.Namespace, podInfo.Port)
-			_, err := node.TaskManager.CreateTask(task)
+			task := NewPrometheusCollectorTask(servicePodName, podInfo.Namespace, podInfo.Port, node.config)
+			_, err := node.TaskManager.CreateTask(task, node.config)
 			if err != nil {
 				return err
 			}
@@ -103,7 +104,7 @@ func getTaskIDFromTaskName(manager *TaskManager, name string) (string, error) {
 	return "", errors.New("Can not find ID from Name")
 }
 
-func NewSnapNode(nodeName string, externalIp string, serviceList []string) *SnapNode {
+func NewSnapNode(nodeName string, externalIp string, serviceList []string, config *viper.Viper) *SnapNode {
 	return &SnapNode{
 		NodeId:             nodeName,
 		ExternalIP:         externalIp,
@@ -113,6 +114,7 @@ func NewSnapNode(nodeName string, externalIp string, serviceList []string) *Snap
 		PodEvents:          make(chan *operator.PodEvent, 1000),
 		ExitChan:           make(chan bool, 1),
 		ServiceList:        serviceList,
+		config:             config,
 	}
 }
 
@@ -121,7 +123,7 @@ func (s *SnapTaskController) Init(clusterState *operator.ClusterState) error {
 	for _, n := range clusterState.Nodes {
 		for _, p := range clusterState.Pods {
 			if p.Spec.NodeName == n.NodeName && isSnapPod(p) {
-				snapNode := NewSnapNode(n.NodeName, n.ExternalIP, s.ServiceList)
+				snapNode := NewSnapNode(n.NodeName, n.ExternalIP, s.ServiceList, s.config)
 				init, err := snapNode.init(s.isOutsideCluster, clusterState)
 				if !init {
 					log.Printf("Snap is not found in the cluster for node during init: %s", n.NodeName)
@@ -154,9 +156,9 @@ func (n *SnapNode) initSnap(isOutsideCluster bool, snapPod *v1.Pod, clusterState
 	var taskManager *TaskManager
 	var err error
 	if isOutsideCluster {
-		taskManager, err = NewTaskManager(n.ExternalIP)
+		taskManager, err = NewTaskManager(n.ExternalIP, n.config)
 	} else {
-		taskManager, err = NewTaskManager(snapPod.Status.PodIP)
+		taskManager, err = NewTaskManager(snapPod.Status.PodIP, n.config)
 	}
 
 	if err != nil {
@@ -167,11 +169,11 @@ func (n *SnapNode) initSnap(isOutsideCluster bool, snapPod *v1.Pod, clusterState
 	n.TaskManager = taskManager
 
 	for !n.TaskManager.IsReady() {
-		log.Println("wait for Snap Task Manager Load plugin complete")
+		log.Println("[ SnapNode ] {%s} wait for loading plugin complete", n.NodeId)
 		time.Sleep(time.Second * 10)
 		// TODO: Wait until a limit before we throw error
 	}
-	log.Printf("Plugin Load Complete")
+	log.Printf("[ SnapNode ] {%s} Loads Plugin  Complete", n.NodeId)
 
 	tasks := n.TaskManager.GetTasks()
 	for _, task := range tasks.ScheduledTasks {
@@ -222,7 +224,7 @@ func (s *SnapTaskController) ProcessPod(e *operator.PodEvent) {
 			return
 		}
 
-		if s.isServicePod(e.Cur) {
+		if node.isServicePod(e.Cur) {
 			node.PodEvents <- e
 		}
 	case operator.ADD, operator.UPDATE:
@@ -232,7 +234,7 @@ func (s *SnapTaskController) ProcessPod(e *operator.PodEvent) {
 			if !ok {
 				if isSnapPod(e.Cur) {
 					log.Printf("Add new SnapNode")
-					newNode := NewSnapNode(nodeName, s.ClusterState.Nodes[nodeName].ExternalIP, s.ServiceList)
+					newNode := NewSnapNode(nodeName, s.ClusterState.Nodes[nodeName].ExternalIP, s.ServiceList, s.config)
 					s.Nodes[nodeName] = newNode
 					go func() {
 						if err := newNode.initSnap(s.isOutsideCluster, e.Cur, s.ClusterState); err != nil {

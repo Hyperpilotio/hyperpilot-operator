@@ -5,6 +5,7 @@ import (
 	"log"
 	"sync"
 
+	"github.com/spf13/viper"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/api/v1"
@@ -104,7 +105,7 @@ type HyperpilotOperator struct {
 }
 
 // NewHyperpilotOperator creates a new NewHyperpilotOperator
-func NewHyperpilotOperator(kclient *kubernetes.Clientset, controllers []EventProcessor) (*HyperpilotOperator, error) {
+func NewHyperpilotOperator(kclient *kubernetes.Clientset, controllers []EventProcessor, config *viper.Viper) (*HyperpilotOperator, error) {
 	baseControllers := []BaseController{}
 	resourceEnums := []ResourceEnum{}
 	for _, controller := range controllers {
@@ -134,37 +135,11 @@ func NewHyperpilotOperator(kclient *kubernetes.Clientset, controllers []EventPro
 	return hpc, nil
 }
 
-func (c *HyperpilotOperator) ProcessDaemonSet(e *DaemonSetEvent) {
+func (c *HyperpilotOperator) ProcessDaemonSet(e *DaemonSetEvent) {}
 
-}
+func (c *HyperpilotOperator) ProcessDeployment(e *DeploymentEvent) {}
 
-func (c *HyperpilotOperator) ProcessDeployment(e *DeploymentEvent) {
-	//TODO
-	if e.EventType == ADD {
-	}
-
-	//TODO
-	if e.EventType == DELETE {
-	}
-
-	//TODO
-	if e.EventType == UPDATE {
-	}
-}
-
-func (c *HyperpilotOperator) ProcessNode(e *NodeEvent) {
-	//TODO
-	if e.EventType == ADD {
-	}
-
-	//TODO
-	if e.EventType == DELETE {
-	}
-
-	//TODO
-	if e.EventType == UPDATE {
-	}
-}
+func (c *HyperpilotOperator) ProcessNode(e *NodeEvent) {}
 
 func (c *HyperpilotOperator) ProcessPod(e *PodEvent) {
 	if e.EventType == DELETE {

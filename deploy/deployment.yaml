@@ -13,10 +13,8 @@ spec:
         k8s-app: hyperpilot-operator
     spec:
       containers:
-      - image: ogre0403/hyperpilot-operator:201710201203
+      - image: ogre0403/hyperpilot-operator:201711111140
         command: ["/hyperpilot-operator"]
-        # comment out to monitor all namespace
-        # args: ["-namespace", "hyperpilot"]
         imagePullPolicy: Always
         name: hyperpilot-operator
       restartPolicy: Always
