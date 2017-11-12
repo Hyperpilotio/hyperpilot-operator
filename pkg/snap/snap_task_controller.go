@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"strings"
-	"time"
 
 	"github.com/hyperpilotio/hyperpilot-operator/pkg/operator"
 	"github.com/spf13/viper"
@@ -65,7 +64,7 @@ func (node *SnapNode) reconcileSnapState() error {
 				return err
 			}
 			node.SnapTasks[servicePodName] = task.Name
-			log.Printf("Create task {%s} in Node {%s}", task.Name, node.NodeId)
+			log.Printf("[ SnapNode ] Create task {%s} in Node {%s}", task.Name, node.NodeId)
 		}
 	}
 
@@ -81,7 +80,7 @@ func (node *SnapNode) reconcileSnapState() error {
 				return nil
 			}
 			delete(node.SnapTasks, servicePodName)
-			log.Printf("Delete task {%s} in Node {%s}", taskName, node.NodeId)
+			log.Printf("[ SnapNode ] Delete task {%s} in Node {%s}", taskName, node.NodeId)
 		}
 	}
 	return nil
@@ -126,10 +125,10 @@ func (s *SnapTaskController) Init(clusterState *operator.ClusterState) error {
 				snapNode := NewSnapNode(n.NodeName, n.ExternalIP, s.ServiceList, s.config)
 				init, err := snapNode.init(s.isOutsideCluster, clusterState)
 				if !init {
-					log.Printf("Snap is not found in the cluster for node during init: %s", n.NodeName)
+					log.Printf("[ Controller ] Snap is not found in the cluster for node during init: %s", n.NodeName)
 					// We will assume a new snap will be running and we will be notified at ProcessPod
 				} else if err != nil {
-					log.Printf("Unable to init snap for node %s: %s", n.NodeName, err.Error())
+					log.Printf("[ Controller ] Unable to init snap for node %s: %s", n.NodeName, err.Error())
 				} else {
 					s.Nodes[n.NodeName] = snapNode
 				}
@@ -168,10 +167,11 @@ func (n *SnapNode) initSnap(isOutsideCluster bool, snapPod *v1.Pod, clusterState
 
 	n.TaskManager = taskManager
 
-	for !n.TaskManager.IsReady() {
-		log.Println("[ SnapNode ] {%s} wait for loading plugin complete", n.NodeId)
-		time.Sleep(time.Second * 10)
-		// TODO: Wait until a limit before we throw error
+	//todo: how to initSnap if timeout
+	err = n.TaskManager.WaitForLoadPlugins(n.config.GetInt("SnapTaskController.PluginDownloadTimeoutMin"))
+	if err != nil {
+		log.Printf("Failed to create Snap Task Manager in Node {%s}: {%s}", n.NodeId, err.Error())
+		return err
 	}
 	log.Printf("[ SnapNode ] {%s} Loads Plugin  Complete", n.NodeId)
 
@@ -216,11 +216,9 @@ func (s *SnapTaskController) ProcessPod(e *operator.PodEvent) {
 		}
 
 		if isSnapPod(e.Cur) {
-			log.Printf("Delete SNAP %s pod in ProcessPod", e.Cur.Name)
-
+			log.Printf("[ Controller ] Delete SnapNode in {%s}", node.NodeId)
 			node.Exit()
 			delete(s.Nodes, nodeName)
-
 			return
 		}
 
@@ -233,13 +231,13 @@ func (s *SnapTaskController) ProcessPod(e *operator.PodEvent) {
 			node, ok := s.Nodes[nodeName]
 			if !ok {
 				if isSnapPod(e.Cur) {
-					log.Printf("Add new SnapNode")
+					log.Printf("[ Controller ] Create new SnapNode in {%s}.", node.NodeId)
 					newNode := NewSnapNode(nodeName, s.ClusterState.Nodes[nodeName].ExternalIP, s.ServiceList, s.config)
 					s.Nodes[nodeName] = newNode
 					go func() {
 						if err := newNode.initSnap(s.isOutsideCluster, e.Cur, s.ClusterState); err != nil {
-							// Handle snap node wasn't able to initialize
-							// Most likely need to remove snap from nodes map.
+							delete(s.Nodes, nodeName)
+							log.Printf("[ Controller ] Unable to init snap for node %s: %s", nodeName, err.Error())
 						}
 					}()
 				}
@@ -257,7 +255,7 @@ func (n *SnapNode) Run(isOutsideCluster bool) {
 		for {
 			select {
 			case <-n.ExitChan:
-				log.Printf("Snap node %s signaled to exit", n.NodeId)
+				log.Printf("[ SnapNode ] {%s} signaled to exit", n.NodeId)
 				return
 			case e := <-n.PodEvents:
 				switch e.EventType {
@@ -271,7 +269,7 @@ func (n *SnapNode) Run(isOutsideCluster bool) {
 						log.Printf("Unable to reconcile snap state: %s", err.Error())
 						return
 					}
-					log.Printf("[ Controller ] Insert Pod {%s}", e.Cur.Name)
+					log.Printf("[ SnapNode ] Insert Service Pod {%s}", e.Cur.Name)
 
 				case operator.DELETE:
 					if _, ok := n.RunningServicePods[e.Cur.Name]; ok {
@@ -280,7 +278,7 @@ func (n *SnapNode) Run(isOutsideCluster bool) {
 							log.Printf("Unable to reconcile snap state: %s", err.Error())
 							return
 						}
-						log.Printf("[ Controller ] Delete Pod {%s}", e.Cur.Name)
+						log.Printf("[ SnapNode ] Delete Service Pod {%s}", e.Cur.Name)
 					} else {
 						log.Printf("Unable to find and delete service pod {%s} in running tasks!", e.Cur.Name)
 					}

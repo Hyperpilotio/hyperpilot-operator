@@ -2,6 +2,7 @@ package snap
 
 import (
 	"errors"
+	"log"
 	"strconv"
 	"time"
 
@@ -154,11 +155,31 @@ func (manager *TaskManager) StopAndRemoveTask(taskId string) error {
 	return nil
 }
 
-func (manager *TaskManager) IsReady() bool {
+func (manager *TaskManager) isReady() bool {
 	for _, p := range manager.plugins {
 		if manager.isPluginLoaded(p) == false {
 			return false
 		}
 	}
 	return true
+}
+
+func (manager *TaskManager) WaitForLoadPlugins(min int) error {
+	timeout := time.After(time.Duration(min) * time.Minute)
+	tick10s := time.Tick(10 * time.Second)
+	tick := time.Tick(500 * time.Millisecond)
+	for {
+		select {
+		// Got a timeout! fail with a timeout error
+		case <-timeout:
+			return errors.New("Plugin download timeout")
+			// Got a tick, we should check on doSomething()
+		case <-tick10s:
+			log.Printf("[ TaskManager ] Wait for loading plugin complete")
+		case <-tick:
+			if manager.isReady() {
+				return nil
+			}
+		}
+	}
 }
