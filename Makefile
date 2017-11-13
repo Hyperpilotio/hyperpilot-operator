@@ -1,6 +1,9 @@
 OPERATOR_NAME  := hyperpilot-operator
-VERSION := $(shell date +%Y%m%d%H%M)
-IMAGE := ogre0403/$(OPERATOR_NAME)
+IMAGE := hyperpilot/$(OPERATOR_NAME)
+VERSION := latest
+
+TEST_IMAGE := ogre0403/$(OPERATOR_NAME)
+TEST_VERSION := $(shell date +%Y%m%d%H%M)
 
 .PHONY: install_deps build build-image
 
@@ -20,3 +23,6 @@ clean:
 
 build-image:
 	docker build -t $(IMAGE):$(VERSION) .
+
+build-test-image:
+	docker build -t $(TEST_IMAGE):$(TEST_VERSION) .

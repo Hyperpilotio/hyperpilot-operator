@@ -53,25 +53,6 @@ func NewTaskManager(podIP string, config *viper.Viper) (*TaskManager, error) {
 	}, nil
 }
 
-//func NewPrometheusPluginsList(config *viper.Viper) []*Plugin {
-//
-//	return []*Plugin{
-//		{"snap-plugin-collector-prometheus", "collector", 1},
-//		{"influxdb", "publisher", 22},
-//	}
-//
-//	//var keys []Plugin
-//	//config.UnmarshalKey("SnapTaskController.PluginsList", &keys)
-//	//var r []*Plugin
-//	//
-//	//for _,v :=range keys{
-//	//	vv := v
-//	//	r= append(r, &vv)
-//	//}
-//	//return r
-//
-//}
-
 func NewPrometheusPluginsList(config *viper.Viper) []*Plugin {
 	var plugins []*Plugin
 	config.UnmarshalKey("SnapTaskController.PluginsList", &plugins)
@@ -167,13 +148,11 @@ func (manager *TaskManager) isReady() bool {
 func (manager *TaskManager) WaitForLoadPlugins(min int) error {
 	timeout := time.After(time.Duration(min) * time.Minute)
 	tick10s := time.Tick(10 * time.Second)
-	tick := time.Tick(500 * time.Millisecond)
+	tick := time.Tick(5 * time.Second)
 	for {
 		select {
-		// Got a timeout! fail with a timeout error
 		case <-timeout:
 			return errors.New("Plugin download timeout")
-			// Got a tick, we should check on doSomething()
 		case <-tick10s:
 			log.Printf("[ TaskManager ] Wait for loading plugin complete")
 		case <-tick:
