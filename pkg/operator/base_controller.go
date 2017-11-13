@@ -16,5 +16,4 @@ func (this ResourceEnum) IsRegistered(flag ResourceEnum) bool {
 type BaseController interface {
 	Init(clusterState *ClusterState) error
 	GetResourceEnum() ResourceEnum
-	Close()
 }

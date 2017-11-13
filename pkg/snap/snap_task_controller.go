@@ -46,12 +46,7 @@ func NewSnapTaskController(runOutsideCluster bool, config *viper.Viper) *SnapTas
 }
 
 func (s *SnapTaskController) GetResourceEnum() operator.ResourceEnum {
-	//return POD | NODE | DAEMONSET
 	return operator.POD | operator.NODE
-}
-
-func (s *SnapTaskController) Close() {
-
 }
 
 func (node *SnapNode) reconcileSnapState() error {
