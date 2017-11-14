@@ -5,15 +5,14 @@ import (
 	"log"
 	"sync"
 
+	"github.com/spf13/viper"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/api/v1"
 )
 
-//const K8SEVENT = "K8SEVENT"
-
 const (
-	HYPERPILOT_OPERATOR_NS = "hyperpilot"
+	HYPERPILOT_OPERATOR_NS = ""
 
 	// Operator states
 	OPERATOR_NOT_RUNNING              = -1
@@ -52,6 +51,17 @@ func (receiver *EventReceiver) Run() {
 			if ok {
 				receiver.processor.ProcessNode(e.(*NodeEvent))
 			}
+
+			_, ok = e.(*DaemonSetEvent)
+			if ok {
+				receiver.processor.ProcessDaemonSet(e.(*DaemonSetEvent))
+			}
+
+			_, ok = e.(*DeploymentEvent)
+			if ok {
+				receiver.processor.ProcessDeployment(e.(*DeploymentEvent))
+			}
+
 			// Log unknown event
 		}
 	}()
@@ -59,6 +69,18 @@ func (receiver *EventReceiver) Run() {
 
 func (receiver *EventReceiver) Receive(e Event) {
 	receiver.eventsChan <- e
+}
+
+type ClusterState struct {
+	Nodes map[string]NodeInfo
+	Pods  map[string]*v1.Pod
+}
+
+func NewClusterState() *ClusterState {
+	return &ClusterState{
+		Nodes: make(map[string]NodeInfo),
+		Pods:  make(map[string]*v1.Pod),
+	}
 }
 
 type HyperpilotOperator struct {
@@ -77,14 +99,13 @@ type HyperpilotOperator struct {
 
 	controllers []BaseController
 
-	nodes map[string]NodeInfo
-	pods  map[string]*v1.Pod
+	clusterState *ClusterState
 
 	state int
 }
 
 // NewHyperpilotOperator creates a new NewHyperpilotOperator
-func NewHyperpilotOperator(kclient *kubernetes.Clientset, controllers []EventProcessor) (*HyperpilotOperator, error) {
+func NewHyperpilotOperator(kclient *kubernetes.Clientset, controllers []EventProcessor, config *viper.Viper) (*HyperpilotOperator, error) {
 	baseControllers := []BaseController{}
 	resourceEnums := []ResourceEnum{}
 	for _, controller := range controllers {
@@ -103,8 +124,7 @@ func NewHyperpilotOperator(kclient *kubernetes.Clientset, controllers []EventPro
 		deployRegisters:    make([]*EventReceiver, 0),
 		controllers:        baseControllers,
 		kclient:            kclient,
-		nodes:              map[string]NodeInfo{},
-		pods:               map[string]*v1.Pod{},
+		clusterState:       NewClusterState(),
 		state:              OPERATOR_NOT_RUNNING,
 	}
 
@@ -115,50 +135,24 @@ func NewHyperpilotOperator(kclient *kubernetes.Clientset, controllers []EventPro
 	return hpc, nil
 }
 
-func (c *HyperpilotOperator) ProcessDaemonSet(e *DaemonSetEvent) {
+func (c *HyperpilotOperator) ProcessDaemonSet(e *DaemonSetEvent) {}
 
-}
+func (c *HyperpilotOperator) ProcessDeployment(e *DeploymentEvent) {}
 
-func (c *HyperpilotOperator) ProcessDeployment(e *DeploymentEvent) {
-	//TODO
-	if e.EventType == ADD {
-	}
-
-	//TODO
-	if e.EventType == DELETE {
-	}
-
-	//TODO
-	if e.EventType == UPDATE {
-	}
-}
-
-func (c *HyperpilotOperator) ProcessNode(e *NodeEvent) {
-	//TODO
-	if e.EventType == ADD {
-	}
-
-	//TODO
-	if e.EventType == DELETE {
-	}
-
-	//TODO
-	if e.EventType == UPDATE {
-	}
-}
+func (c *HyperpilotOperator) ProcessNode(e *NodeEvent) {}
 
 func (c *HyperpilotOperator) ProcessPod(e *PodEvent) {
 	if e.EventType == DELETE {
-		delete(c.pods, e.Cur.Name)
+		delete(c.clusterState.Pods, e.Cur.Name)
 		log.Printf("[ operator ] Delete Pod {%s}", e.Cur.Name)
 	}
 
 	// node info is available until pod is in running state
 	if e.EventType == UPDATE {
 		if e.Old.Status.Phase == "Pending" && e.Cur.Status.Phase == "Running" {
-			c.pods[e.Cur.Name] = e.Cur
+			c.clusterState.Pods[e.Cur.Name] = e.Cur
 
-			log.Printf("[ operator ] Insert NEW Pod {%s}", c.pods[e.Cur.Name])
+			log.Printf("[ operator ] Insert NEW Pod {%s}", e.Cur.Name)
 		}
 	}
 
@@ -191,7 +185,7 @@ func (c *HyperpilotOperator) Run(stopCh <-chan struct{}) error {
 			ExternalIP: n.Status.Addresses[1].Address,
 			InternalIP: n.Status.Addresses[0].Address,
 		}
-		c.nodes[a.NodeName] = a
+		c.clusterState.Nodes[a.NodeName] = a
 	}
 
 	pods, err := c.kclient.Pods(HYPERPILOT_OPERATOR_NS).List(metav1.ListOptions{})
@@ -200,7 +194,8 @@ func (c *HyperpilotOperator) Run(stopCh <-chan struct{}) error {
 	}
 
 	for _, p := range pods.Items {
-		c.pods[p.Name] = &p
+		pod := p
+		c.clusterState.Pods[pod.Name] = &pod
 	}
 
 	// 3. Initialize controllers
@@ -210,7 +205,7 @@ func (c *HyperpilotOperator) Run(stopCh <-chan struct{}) error {
 	for _, controller := range c.controllers {
 		controllerWg.Add(1)
 		go func() {
-			controller.Init(c)
+			controller.Init(c.clusterState)
 			controllerWg.Done()
 		}()
 	}

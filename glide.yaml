@@ -1,14 +1,18 @@
 package: github.com/hyperpilotio/hyperpilot-operator
 import:
+- package: github.com/intelsdi-x/snap
+  subpackages:
+  - mgmt/rest/client
+  - scheduler/wmap
 - package: k8s.io/apimachinery
   subpackages:
   - pkg/apis/meta/v1
   - pkg/runtime
   - pkg/watch
 - package: k8s.io/client-go
-  version: ^4.0.0
   subpackages:
   - kubernetes
   - pkg/api/v1
+  - pkg/apis/extensions/v1beta1
   - tools/cache
   - tools/clientcmd

@@ -1,0 +1,31 @@
+{
+  "Operator": {},
+  "SnapTaskController": {
+    "PluginsList": [
+      {
+        "Name": "snap-plugin-collector-prometheus",
+        "Type": "collector",
+        "Version": 1
+      },
+      {
+        "Name": "influxdb",
+        "Type": "publisher",
+        "Version": 22
+      }
+    ],
+    "ServiceList": [
+      "resource-worker"
+    ],
+    "influxdb": {
+      "host": "influxsrv.hyperpilot",
+      "port": 8086,
+      "database": "snap",
+      "user": "root",
+      "pasword": "hyperpilot",
+      "https": false,
+      "skip-verify": false
+    },
+    "CreateTaskRetry": 5,
+    "PluginDownloadTimeoutMin": 5
+  }
+}

@@ -2,6 +2,7 @@ package operator
 
 import (
 	"github.com/gin-gonic/gin"
+	"net/http"
 )
 
 type APIServer struct {
@@ -26,13 +27,11 @@ func (server *APIServer) Run() {
 		appGroup.GET("/:appName/nodes", server.getNodesForApp)
 	}
 
-	actuationGroup := router.Group("/actuation")
-	{
-	}
+	router.Group("/actuation")
 }
 
 func (server *APIServer) getNodesForApp(c *gin.Context) {
-	appName := c.Param("appName")
+	c.Param("appName")
 
 	// TODO: Look up k8s objects of this app, and check cluster state where these objects are.
 

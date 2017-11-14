@@ -5,7 +5,7 @@ docker exec -ti e5 /bin/bash
 curl -sLO https://github.com/intelsdi-x/snap-plugin-processor-tag/releases/download/3/snap-plugin-processor-tag_linux_x86_64
 curl -sLO https://github.com/intelsdi-x/snap-plugin-publisher-file/releases/download/2/snap-plugin-publisher-file_linux_x86_64
 curl -sLO https://github.com/intelsdi-x/snap-plugin-collector-cpu/releases/download/7/snap-plugin-collector-cpu_linux_x86_64
-
+curl -sLO https://hyperpilot-snap-collectors.s3.amazonaws.com/snap-plugin-collector-prometheus
 
 https://s3.amazonaws.com/snap-tech-demo-files/snap-average-counter-processor
 

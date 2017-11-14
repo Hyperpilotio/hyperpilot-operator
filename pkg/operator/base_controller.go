@@ -14,7 +14,6 @@ func (this ResourceEnum) IsRegistered(flag ResourceEnum) bool {
 }
 
 type BaseController interface {
-	Init(operator *HyperpilotOperator) error
+	Init(clusterState *ClusterState) error
 	GetResourceEnum() ResourceEnum
-	Close()
 }
