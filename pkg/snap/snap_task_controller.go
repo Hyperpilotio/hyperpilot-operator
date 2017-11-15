@@ -323,3 +323,5 @@ func (s *SnapTaskController) ProcessDeployment(e *operator.DeploymentEvent) {}
 func (s *SnapTaskController) ProcessDaemonSet(e *operator.DaemonSetEvent) {}
 
 func (s *SnapTaskController) ProcessNode(e *operator.NodeEvent) {}
+
+func (s *SnapTaskController) ProcessReplicaSet(e *operator.ReplicaSetEvent) {}

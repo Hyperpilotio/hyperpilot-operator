@@ -48,3 +48,9 @@ type DaemonSetEvent struct {
 	Old *v1beta1.DaemonSet
 	Cur *v1beta1.DaemonSet
 }
+
+type ReplicaSetEvent struct {
+	ResourceEvent
+	Old *v1beta1.ReplicaSet
+	Cur *v1beta1.ReplicaSet
+}
