@@ -1,7 +1,6 @@
 package operator
 
 import (
-	"encoding/json"
 	"log"
 	"net/http"
 
@@ -37,17 +36,6 @@ func (server *APIServer) Run() {
 		clusterGroup.GET("/specs", server.getClusterSpecs)
 		clusterGroup.GET("/nodes", server.getClusterNodes)
 		clusterGroup.GET("/mapping/:types", server.getClusterMapping)
-
-	}
-
-	appGroup := router.Group("/apps")
-	{
-		appGroup.GET("/:appName/nodes", server.getNodesForApp)
-	}
-
-	specGroup := router.Group("/specs")
-	{
-		specGroup.GET("/namespaces/:namespace/types/:type/:name", server.getSpec)
 	}
 
 	router.Group("/actuation")
@@ -56,14 +44,12 @@ func (server *APIServer) Run() {
 func (server *APIServer) getClusterSpecs(c *gin.Context) {
 	var req []SpecRequest
 	resp := []SpecResponse{}
-
 	err := c.BindJSON(&req)
-
 	if err != nil {
-		log.Printf("Parse Json error: " + err.Error())
+		log.Printf("Failed to parse spec request request: " + err.Error())
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": true,
-			"cause": "Parse Json error: " + err.Error(),
+			"cause": "Failed to parse spec request request: " + err.Error(),
 		})
 		return
 	}
@@ -72,7 +58,7 @@ func (server *APIServer) getClusterSpecs(c *gin.Context) {
 		deploymentResponse := []DeploymentResponse{}
 		allDeployment, err := server.getAllDeployment(v.Namespace, v.Deployments)
 		if err != nil {
-			log.Printf(err.Error())
+			log.Printf("Unable to get all deployment for namespace %s and deployments %+v: %s", v.Namespace, v.Deployments, err.Error())
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": true,
 				"cause": "List Deployments Failed: " + err.Error(),
@@ -82,15 +68,15 @@ func (server *APIServer) getClusterSpecs(c *gin.Context) {
 		for k, v := range allDeployment {
 			deploymentResponse = append(deploymentResponse,
 				DeploymentResponse{
-					Name:     k,
-					K8s_spec: v,
+					Name:           k,
+					DeploymentSpec: v,
 				})
 		}
 
 		serviceResponse := []ServiceResponse{}
 		allService, err := server.getAllService(v.Namespace, v.Services)
 		if err != nil {
-			log.Printf(err.Error())
+			log.Printf("Unable to get all deployment for namespace %s and services %+v: %s", v.Namespace, v.Services, err.Error())
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": true,
 				"cause": "List Services Failed: " + err.Error(),
@@ -100,15 +86,15 @@ func (server *APIServer) getClusterSpecs(c *gin.Context) {
 		for k, v := range allService {
 			serviceResponse = append(serviceResponse,
 				ServiceResponse{
-					Name:     k,
-					K8s_spec: v,
+					Name:        k,
+					ServiceSpec: v,
 				})
 		}
 
 		statefulsetResponse := []StatefulSetResponse{}
 		allStateful, err := server.getAllStatefulSet(v.Namespace, v.Statefulsets)
 		if err != nil {
-			log.Printf(err.Error())
+			log.Printf("Unable to get all deployment for namespace %s and StatefulSet %+v: %s", v.Namespace, v.Statefulsets, err.Error())
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": true,
 				"cause": "List StatefulSets Failed: " + err.Error(),
@@ -118,8 +104,8 @@ func (server *APIServer) getClusterSpecs(c *gin.Context) {
 		for k, v := range allStateful {
 			statefulsetResponse = append(statefulsetResponse,
 				StatefulSetResponse{
-					Name:     k,
-					K8s_spec: v,
+					Name:            k,
+					StatefulSetSpec: v,
 				})
 		}
 
@@ -130,22 +116,16 @@ func (server *APIServer) getClusterSpecs(c *gin.Context) {
 			Statefulsets: statefulsetResponse,
 		})
 	}
-
 	c.JSON(http.StatusOK, resp)
-
 }
 
 func (server *APIServer) getAllDeployment(namespace string, deployments []string) (map[string]*extv1beta1.Deployment, error) {
-
-	var allDeployment = map[string]*extv1beta1.Deployment{}
-
+	allDeployment := map[string]*extv1beta1.Deployment{}
 	for _, deploymentName := range deployments {
-
 		option := metav1.ListOptions{
 			FieldSelector: "metadata.name=" + deploymentName,
 		}
 		d, err := server.K8sClient.ExtensionsV1beta1Client.Deployments(namespace).List(option)
-
 		if err != nil {
 			log.Printf("List Deployment fail: " + err.Error())
 			return nil, err
@@ -153,33 +133,23 @@ func (server *APIServer) getAllDeployment(namespace string, deployments []string
 
 		if len(d.Items) == 0 {
 			allDeployment[deploymentName] = nil
-		}
-
-		if len(d.Items) > 1 {
-			// Should not be happen
+		} else if len(d.Items) > 1 {
 			log.Printf("Found multiple deployments {%s} in namespace {%s}", deploymentName, namespace)
-		}
-
-		if len(d.Items) != 0 {
+		} else {
 			r := d.Items[0]
 			allDeployment[deploymentName] = &r
 		}
 	}
-
 	return allDeployment, nil
 }
 
 func (server *APIServer) getAllService(namespace string, services []string) (map[string]*v1.Service, error) {
-
-	var allService = map[string]*v1.Service{}
-
+	allService := map[string]*v1.Service{}
 	for _, serviceName := range services {
 		option := metav1.ListOptions{
 			FieldSelector: "metadata.name=" + serviceName,
 		}
-
 		s, err := server.K8sClient.CoreV1Client.Services(namespace).List(option)
-
 		if err != nil {
 			log.Printf("List Service fail: " + err.Error())
 			return nil, err
@@ -187,54 +157,37 @@ func (server *APIServer) getAllService(namespace string, services []string) (map
 
 		if len(s.Items) == 0 {
 			allService[serviceName] = nil
-		}
-
-		if len(s.Items) > 1 {
-			// Should not be happen
-			log.Printf("Found multiple deployments {%s} in namespace {%s}", serviceName, namespace)
-		}
-
-		if len(s.Items) != 0 {
+		} else if len(s.Items) > 1 {
+			log.Printf("Found multiple Services {%s} in namespace {%s}", serviceName, namespace)
+		} else {
 			r := s.Items[0]
 			allService[serviceName] = &r
 		}
-
 	}
-
 	return allService, nil
 }
 
 func (server *APIServer) getAllStatefulSet(namespace string, statefulset []string) (map[string]*appv1beta1.StatefulSet, error) {
-	var allStatefulSet = map[string]*appv1beta1.StatefulSet{}
-
+	allStatefulSet := map[string]*appv1beta1.StatefulSet{}
 	for _, statefulSetName := range statefulset {
-
 		option := metav1.ListOptions{
 			FieldSelector: "metadata.name=" + statefulSetName,
 		}
-
 		s, err := server.K8sClient.AppsV1beta1Client.StatefulSets(namespace).List(option)
-
 		if err != nil {
-			log.Printf("List StatefuleSet fail: " + err.Error())
+			log.Printf("List StatefulSet fail: " + err.Error())
 			return nil, err
 		}
 
 		if len(s.Items) == 0 {
 			allStatefulSet[statefulSetName] = nil
-		}
-
-		if len(s.Items) > 1 {
-			// Should not be happen
-			log.Printf("Found multiple deployments {%s} in namespace {%s}", allStatefulSet, namespace)
-		}
-
-		if len(s.Items) != 0 {
+		} else if len(s.Items) > 1 {
+			log.Printf("Found multiple StatefulSets {%s} in namespace {%s}", statefulSetName, namespace)
+		} else {
 			r := s.Items[0]
 			allStatefulSet[statefulSetName] = &r
 		}
 	}
-
 	return allStatefulSet, nil
 }
 
@@ -243,45 +196,5 @@ func (server *APIServer) getClusterNodes(c *gin.Context) {
 }
 
 func (server *APIServer) getClusterMapping(c *gin.Context) {
-
-}
-
-func (server *APIServer) getNodesForApp(c *gin.Context) {
-	c.Param("appName")
-
-	// TODO: Look up k8s objects of this app, and check cluster state where these objects are.
-
-	nodeNames := []string{}
-	c.JSON(http.StatusOK, gin.H{
-		"error": true,
-		"data":  nodeNames,
-	})
-}
-
-func (server *APIServer) getSpec(c *gin.Context) {
-	// e.g: /specs/namespaces/hyperpilot/types/deployment/goddd
-	namespace := c.Param("namespace")
-	Type := c.Param("type")
-	name := c.Param("name")
-
-	option := metav1.ListOptions{
-		FieldSelector: "metadata.name=" + name,
-	}
-
-	switch {
-	case Type == "deployment":
-		d, _ := server.K8sClient.ExtensionsV1beta1Client.Deployments(namespace).List(option)
-
-		if len(d.Items) != 1 {
-			log.Print("not found")
-			return
-		}
-		b := d.Items[0]
-		data, _ := json.Marshal(b)
-		log.Print(string(data[:]))
-
-	case Type == "StatefulSet":
-		//TODO
-	}
 
 }
