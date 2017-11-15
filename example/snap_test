@@ -17,3 +17,7 @@ snaptel plugin load snap-plugin-publisher-file_linux_x86_64
 
 
 snaptel plugin list
+
+
+
+curl -X GET --data @request_body.json  -H "Accept: application/json" "http://127.0.0.1:8080/cluster/specs"
