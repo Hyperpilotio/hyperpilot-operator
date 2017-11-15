@@ -61,15 +61,22 @@ func (server *APIServer) getClusterSpecs(c *gin.Context) {
 
 	if err != nil {
 		log.Printf("Parse Json error: " + err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": true,
+			"cause": "Parse Json error: " + err.Error(),
+		})
 		return
 	}
 
 	for _, v := range req {
-
 		deploymentResponse := []DeploymentResponse{}
 		allDeployment, err := server.getAllDeployment(v.Namespace, v.Deployments)
 		if err != nil {
 			log.Printf(err.Error())
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": true,
+				"cause": "List Deployments Failed: " + err.Error(),
+			})
 			return
 		}
 		for k, v := range allDeployment {
@@ -84,6 +91,10 @@ func (server *APIServer) getClusterSpecs(c *gin.Context) {
 		allService, err := server.getAllService(v.Namespace, v.Services)
 		if err != nil {
 			log.Printf(err.Error())
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": true,
+				"cause": "List Services Failed: " + err.Error(),
+			})
 			return
 		}
 		for k, v := range allService {
@@ -98,6 +109,10 @@ func (server *APIServer) getClusterSpecs(c *gin.Context) {
 		allStateful, err := server.getAllStatefulSet(v.Namespace, v.Statefulsets)
 		if err != nil {
 			log.Printf(err.Error())
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": true,
+				"cause": "List StatefulSets Failed: " + err.Error(),
+			})
 			return
 		}
 		for k, v := range allStateful {
@@ -141,7 +156,7 @@ func (server *APIServer) getAllDeployment(namespace string, deployments []string
 		}
 
 		if len(d.Items) > 1 {
-			// Should not be here
+			// Should not be happen
 			log.Printf("Found multiple deployments {%s} in namespace {%s}", deploymentName, namespace)
 		}
 
@@ -175,7 +190,7 @@ func (server *APIServer) getAllService(namespace string, services []string) (map
 		}
 
 		if len(s.Items) > 1 {
-			// Should not be here
+			// Should not be happen
 			log.Printf("Found multiple deployments {%s} in namespace {%s}", serviceName, namespace)
 		}
 
@@ -210,7 +225,7 @@ func (server *APIServer) getAllStatefulSet(namespace string, statefulset []strin
 		}
 
 		if len(s.Items) > 1 {
-			// Should not be here
+			// Should not be happen
 			log.Printf("Found multiple deployments {%s} in namespace {%s}", allStatefulSet, namespace)
 		}
 
