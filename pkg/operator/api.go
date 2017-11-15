@@ -72,11 +72,11 @@ func (server *APIServer) getClusterSpecs(c *gin.Context) {
 			log.Printf(err.Error())
 			return
 		}
-		for _, d := range allDeployment {
+		for k, v := range allDeployment {
 			deploymentResponse = append(deploymentResponse,
 				DeploymentResponse{
-					Name:     d.Name,
-					K8s_spec: d,
+					Name:     k,
+					K8s_spec: v,
 				})
 		}
 
@@ -86,11 +86,11 @@ func (server *APIServer) getClusterSpecs(c *gin.Context) {
 			log.Printf(err.Error())
 			return
 		}
-		for _, s := range allService {
+		for k, v := range allService {
 			serviceResponse = append(serviceResponse,
 				ServiceResponse{
-					Name:     s.Name,
-					K8s_spec: s,
+					Name:     k,
+					K8s_spec: v,
 				})
 		}
 
@@ -100,11 +100,11 @@ func (server *APIServer) getClusterSpecs(c *gin.Context) {
 			log.Printf(err.Error())
 			return
 		}
-		for _, s := range allStateful {
+		for k, v := range allStateful {
 			statefulsetResponse = append(statefulsetResponse,
 				StatefulSetResponse{
-					Name:     s.Name,
-					K8s_spec: s,
+					Name:     k,
+					K8s_spec: v,
 				})
 		}
 
@@ -120,11 +120,12 @@ func (server *APIServer) getClusterSpecs(c *gin.Context) {
 
 }
 
-func (server *APIServer) getAllDeployment(namespace string, deployments []string) ([]extv1beta1.Deployment, error) {
+func (server *APIServer) getAllDeployment(namespace string, deployments []string) (map[string]*extv1beta1.Deployment, error) {
 
-	var allDeployment = []extv1beta1.Deployment{}
+	var allDeployment = map[string]*extv1beta1.Deployment{}
 
 	for _, deploymentName := range deployments {
+
 		option := metav1.ListOptions{
 			FieldSelector: "metadata.name=" + deploymentName,
 		}
@@ -135,13 +136,8 @@ func (server *APIServer) getAllDeployment(namespace string, deployments []string
 			return nil, err
 		}
 
-		//TODO: if not exist, add an non-exist or something
 		if len(d.Items) == 0 {
-			allDeployment = append(allDeployment, extv1beta1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "Not Exist",
-				},
-			})
+			allDeployment[deploymentName] = nil
 		}
 
 		if len(d.Items) > 1 {
@@ -150,17 +146,17 @@ func (server *APIServer) getAllDeployment(namespace string, deployments []string
 		}
 
 		if len(d.Items) != 0 {
-			allDeployment = append(allDeployment, d.Items[0])
+			r := d.Items[0]
+			allDeployment[deploymentName] = &r
 		}
-
 	}
 
 	return allDeployment, nil
 }
 
-func (server *APIServer) getAllService(namespace string, services []string) ([]v1.Service, error) {
+func (server *APIServer) getAllService(namespace string, services []string) (map[string]*v1.Service, error) {
 
-	var allService = []v1.Service{}
+	var allService = map[string]*v1.Service{}
 
 	for _, serviceName := range services {
 		option := metav1.ListOptions{
@@ -174,13 +170,8 @@ func (server *APIServer) getAllService(namespace string, services []string) ([]v
 			return nil, err
 		}
 
-		//TODO: if not exist, add an non-exist or something
 		if len(s.Items) == 0 {
-			allService = append(allService, v1.Service{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "Not Exist",
-				},
-			})
+			allService[serviceName] = nil
 		}
 
 		if len(s.Items) > 1 {
@@ -189,7 +180,8 @@ func (server *APIServer) getAllService(namespace string, services []string) ([]v
 		}
 
 		if len(s.Items) != 0 {
-			allService = append(allService, s.Items[0])
+			r := s.Items[0]
+			allService[serviceName] = &r
 		}
 
 	}
@@ -197,8 +189,8 @@ func (server *APIServer) getAllService(namespace string, services []string) ([]v
 	return allService, nil
 }
 
-func (server *APIServer) getAllStatefulSet(namespace string, statefulset []string) ([]appv1beta1.StatefulSet, error) {
-	var allStatefulSet = []appv1beta1.StatefulSet{}
+func (server *APIServer) getAllStatefulSet(namespace string, statefulset []string) (map[string]*appv1beta1.StatefulSet, error) {
+	var allStatefulSet = map[string]*appv1beta1.StatefulSet{}
 
 	for _, statefulSetName := range statefulset {
 
@@ -213,13 +205,8 @@ func (server *APIServer) getAllStatefulSet(namespace string, statefulset []strin
 			return nil, err
 		}
 
-		//TODO: if not exist, add an non-exist or something
 		if len(s.Items) == 0 {
-			allStatefulSet = append(allStatefulSet, appv1beta1.StatefulSet{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "Not Exist",
-				},
-			})
+			allStatefulSet[statefulSetName] = nil
 		}
 
 		if len(s.Items) > 1 {
@@ -228,7 +215,8 @@ func (server *APIServer) getAllStatefulSet(namespace string, statefulset []strin
 		}
 
 		if len(s.Items) != 0 {
-			allStatefulSet = append(allStatefulSet, s.Items[0])
+			r := s.Items[0]
+			allStatefulSet[statefulSetName] = &r
 		}
 	}
 

@@ -21,16 +21,16 @@ type SpecResponse struct {
 }
 
 type DeploymentResponse struct {
-	Name     string                `json:"name"`
-	K8s_spec extv1beta1.Deployment `json:"k8s_spec"`
+	Name     string                 `json:"name"`
+	K8s_spec *extv1beta1.Deployment `json:"k8s_spec"`
 }
 
 type ServiceResponse struct {
-	Name     string     `json:"name"`
-	K8s_spec v1.Service `json:"k8s_spec"`
+	Name     string      `json:"name"`
+	K8s_spec *v1.Service `json:"k8s_spec"`
 }
 
 type StatefulSetResponse struct {
-	Name     string                 `json:"name"`
-	K8s_spec appv1beta1.StatefulSet `json:"k8s_spec"`
+	Name     string                  `json:"name"`
+	K8s_spec *appv1beta1.StatefulSet `json:"k8s_spec"`
 }
