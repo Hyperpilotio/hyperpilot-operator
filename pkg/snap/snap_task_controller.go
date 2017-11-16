@@ -120,10 +120,10 @@ func (s *SnapTaskController) Init(clusterState *operator.ClusterState) error {
 				snapNode := NewSnapNode(n.NodeName, n.ExternalIP, s.ServiceList, s.config)
 				init, err := snapNode.init(s.isOutsideCluster, clusterState)
 				if !init {
-					log.Printf("[ Controller ] Snap is not found in the cluster for node during init: %s", n.NodeName)
+					log.Printf("[ SnapTaskController ] Snap is not found in the cluster for node during init: %s", n.NodeName)
 					// We will assume a new snap will be running and we will be notified at ProcessPod
 				} else if err != nil {
-					log.Printf("[ Controller ] Unable to init snap for node %s: %s", n.NodeName, err.Error())
+					log.Printf("[ SnapTaskController ] Unable to init snap for node %s: %s", n.NodeName, err.Error())
 				} else {
 					s.Nodes[n.NodeName] = snapNode
 				}
@@ -211,7 +211,7 @@ func (s *SnapTaskController) ProcessPod(e *operator.PodEvent) {
 		}
 
 		if isSnapPod(e.Cur) {
-			log.Printf("[ Controller ] Delete SnapNode in {%s}", node.NodeId)
+			log.Printf("[ SnapTaskController ] Delete SnapNode in {%s}", node.NodeId)
 			node.Exit()
 			delete(s.Nodes, nodeName)
 			return
@@ -227,13 +227,13 @@ func (s *SnapTaskController) ProcessPod(e *operator.PodEvent) {
 			if !ok {
 				if isSnapPod(e.Cur) {
 					newNode := NewSnapNode(nodeName, s.ClusterState.Nodes[nodeName].ExternalIP, s.ServiceList, s.config)
-					log.Printf("[ Controller ] Create new SnapNode in {%s}.", newNode.NodeId)
+					log.Printf("[ SnapTaskController ] Create new SnapNode in {%s}.", newNode.NodeId)
 					s.Nodes[nodeName] = newNode
 					go func() {
 						if err := newNode.initSnap(s.isOutsideCluster, e.Cur, s.ClusterState); err != nil {
 							// todo: fix crash because current map write
 							//delete(s.Nodes, nodeName)
-							log.Printf("[ Controller ] Unable to init snap for node %s: %s", nodeName, err.Error())
+							log.Printf("[ SnapTaskController ] Unable to init snap for node %s: %s", nodeName, err.Error())
 						}
 					}()
 				}

@@ -266,7 +266,10 @@ func (c *HyperpilotOperator) Run(stopCh <-chan struct{}) error {
 	c.nodeInformer.onOperatorReady()
 	c.rsInformer.onOperatorReady()
 
-	c.InitApiServer()
+	err = c.InitApiServer()
+	if err != nil {
+		return errors.New("Unable to start API server: " + err.Error())
+	}
 
 	// Wait till we receive a stop signal
 	<-stopCh
@@ -310,6 +313,10 @@ func (c *HyperpilotOperator) accept(processor EventProcessor, resourceEnum Resou
 	}
 }
 
-func (c *HyperpilotOperator) InitApiServer() {
-	NewAPIServer(c.clusterState, c.kclient, c.config).Run()
+func (c *HyperpilotOperator) InitApiServer() error {
+	err := NewAPIServer(c.clusterState, c.kclient, c.config).Run()
+	if err != nil {
+		return err
+	}
+	return nil
 }

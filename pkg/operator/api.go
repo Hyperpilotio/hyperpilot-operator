@@ -29,7 +29,7 @@ func NewAPIServer(clusterState *ClusterState, k8sClient *kubernetes.Clientset, c
 	}
 }
 
-func (server *APIServer) Run() {
+func (server *APIServer) Run() error {
 	if !server.config.GetBool("APIServer.Debug") {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -50,8 +50,9 @@ func (server *APIServer) Run() {
 	log.Printf("[ APIServer ] API Server starts")
 	err := router.Run(":" + server.config.GetString("APIServer.Port"))
 	if err != nil {
-		log.Printf(err.Error())
+		return err
 	}
+	return nil
 }
 
 func (server *APIServer) getClusterSpecs(c *gin.Context) {
@@ -250,7 +251,7 @@ func (server *APIServer) findReplicaSetHash(deploymentName string) (string, erro
 			}
 		}
 	}
-	return "", errors.New("[ APIServer ] Can't find ReplicaSet Pod-template-hash for Deployment {" + deploymentName + "}")
+	return "", errors.New("Can't find ReplicaSet Pod-template-hash for Deployment {" + deploymentName + "}")
 }
 
 func (server *APIServer) findDeploymentPod(namespace, deploymentName, hash string) []*v1.Pod {
