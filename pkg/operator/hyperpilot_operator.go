@@ -114,7 +114,7 @@ type HyperpilotOperator struct {
 
 	state int
 
-	apiServer *APIServer
+	config *viper.Viper
 }
 
 // NewHyperpilotOperator creates a new NewHyperpilotOperator
@@ -140,6 +140,7 @@ func NewHyperpilotOperator(kclient *kubernetes.Clientset, controllers []EventPro
 		kclient:            kclient,
 		clusterState:       NewClusterState(),
 		state:              OPERATOR_NOT_RUNNING,
+		config:             config,
 	}
 
 	for i, controller := range controllers {
@@ -265,6 +266,8 @@ func (c *HyperpilotOperator) Run(stopCh <-chan struct{}) error {
 	c.nodeInformer.onOperatorReady()
 	c.rsInformer.onOperatorReady()
 
+	c.InitApiServer()
+
 	// Wait till we receive a stop signal
 	<-stopCh
 
@@ -308,5 +311,5 @@ func (c *HyperpilotOperator) accept(processor EventProcessor, resourceEnum Resou
 }
 
 func (c *HyperpilotOperator) InitApiServer() {
-	c.apiServer = NewAPIServer(c.clusterState, c.kclient)
+	NewAPIServer(c.clusterState, c.kclient, c.config).Run()
 }

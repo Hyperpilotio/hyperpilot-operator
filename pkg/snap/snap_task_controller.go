@@ -39,7 +39,7 @@ type SnapTaskController struct {
 func NewSnapTaskController(runOutsideCluster bool, config *viper.Viper) *SnapTaskController {
 	return &SnapTaskController{
 		ServiceList:      config.GetStringSlice("SnapTaskController.ServiceList"),
-		Nodes:            map[string]*SnapNode{},
+		Nodes:            make(map[string]*SnapNode),
 		isOutsideCluster: runOutsideCluster,
 		config:           config,
 	}
@@ -226,12 +226,13 @@ func (s *SnapTaskController) ProcessPod(e *operator.PodEvent) {
 			node, ok := s.Nodes[nodeName]
 			if !ok {
 				if isSnapPod(e.Cur) {
-					log.Printf("[ Controller ] Create new SnapNode in {%s}.", node.NodeId)
 					newNode := NewSnapNode(nodeName, s.ClusterState.Nodes[nodeName].ExternalIP, s.ServiceList, s.config)
+					log.Printf("[ Controller ] Create new SnapNode in {%s}.", newNode.NodeId)
 					s.Nodes[nodeName] = newNode
 					go func() {
 						if err := newNode.initSnap(s.isOutsideCluster, e.Cur, s.ClusterState); err != nil {
-							delete(s.Nodes, nodeName)
+							// todo: fix crash because current map write
+							//delete(s.Nodes, nodeName)
 							log.Printf("[ Controller ] Unable to init snap for node %s: %s", nodeName, err.Error())
 						}
 					}()

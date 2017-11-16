@@ -3,8 +3,11 @@ package operator
 import (
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
+	"github.com/spf13/viper"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/api/v1"
@@ -15,16 +18,21 @@ import (
 type APIServer struct {
 	ClusterState *ClusterState
 	K8sClient    *kubernetes.Clientset
+	config       *viper.Viper
 }
 
-func NewAPIServer(clusterState *ClusterState, k8sClient *kubernetes.Clientset) *APIServer {
+func NewAPIServer(clusterState *ClusterState, k8sClient *kubernetes.Clientset, config *viper.Viper) *APIServer {
 	return &APIServer{
 		ClusterState: clusterState,
 		K8sClient:    k8sClient,
+		config:       config,
 	}
 }
 
 func (server *APIServer) Run() {
+	if !server.config.GetBool("APIServer.Debug") {
+		gin.SetMode(gin.ReleaseMode)
+	}
 	router := gin.New()
 
 	// Global middleware
@@ -37,8 +45,13 @@ func (server *APIServer) Run() {
 		clusterGroup.GET("/nodes", server.getClusterNodes)
 		clusterGroup.GET("/mapping/:types", server.getClusterMapping)
 	}
-
 	router.Group("/actuation")
+
+	log.Printf("[ APIServer ] API Server starts")
+	err := router.Run(":" + server.config.GetString("APIServer.Port"))
+	if err != nil {
+		log.Printf(err.Error())
+	}
 }
 
 func (server *APIServer) getClusterSpecs(c *gin.Context) {
@@ -46,7 +59,7 @@ func (server *APIServer) getClusterSpecs(c *gin.Context) {
 	resp := []SpecResponse{}
 	err := c.BindJSON(&req)
 	if err != nil {
-		log.Printf("Failed to parse spec request request: " + err.Error())
+		log.Printf("[ APIServer ] Failed to parse spec request request: " + err.Error())
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": true,
 			"cause": "Failed to parse spec request request: " + err.Error(),
@@ -127,14 +140,14 @@ func (server *APIServer) getAllDeployment(namespace string, deployments []string
 		}
 		d, err := server.K8sClient.ExtensionsV1beta1Client.Deployments(namespace).List(option)
 		if err != nil {
-			log.Printf("List Deployment fail: " + err.Error())
+			log.Printf("[ APIServer ] List Deployment fail: " + err.Error())
 			return nil, err
 		}
 
 		if len(d.Items) == 0 {
 			allDeployment[deploymentName] = nil
 		} else if len(d.Items) > 1 {
-			log.Printf("Found multiple deployments {%s} in namespace {%s}", deploymentName, namespace)
+			log.Printf("[ APIServer ] Found multiple deployments {%s} in namespace {%s}", deploymentName, namespace)
 		} else {
 			r := d.Items[0]
 			allDeployment[deploymentName] = &r
@@ -151,14 +164,14 @@ func (server *APIServer) getAllService(namespace string, services []string) (map
 		}
 		s, err := server.K8sClient.CoreV1Client.Services(namespace).List(option)
 		if err != nil {
-			log.Printf("List Service fail: " + err.Error())
+			log.Printf("[ APIServer ] List Service fail: " + err.Error())
 			return nil, err
 		}
 
 		if len(s.Items) == 0 {
 			allService[serviceName] = nil
 		} else if len(s.Items) > 1 {
-			log.Printf("Found multiple Services {%s} in namespace {%s}", serviceName, namespace)
+			log.Printf("[ APIServer ] Found multiple Services {%s} in namespace {%s}", serviceName, namespace)
 		} else {
 			r := s.Items[0]
 			allService[serviceName] = &r
@@ -175,14 +188,14 @@ func (server *APIServer) getAllStatefulSet(namespace string, statefulset []strin
 		}
 		s, err := server.K8sClient.AppsV1beta1Client.StatefulSets(namespace).List(option)
 		if err != nil {
-			log.Printf("List StatefulSet fail: " + err.Error())
+			log.Printf("[ APIServer ] List StatefulSet fail: " + err.Error())
 			return nil, err
 		}
 
 		if len(s.Items) == 0 {
 			allStatefulSet[statefulSetName] = nil
 		} else if len(s.Items) > 1 {
-			log.Printf("Found multiple StatefulSets {%s} in namespace {%s}", statefulSetName, namespace)
+			log.Printf("[ APIServer ] Found multiple StatefulSets {%s} in namespace {%s}", statefulSetName, namespace)
 		} else {
 			r := s.Items[0]
 			allStatefulSet[statefulSetName] = &r
@@ -192,7 +205,82 @@ func (server *APIServer) getAllStatefulSet(namespace string, statefulset []strin
 }
 
 func (server *APIServer) getClusterNodes(c *gin.Context) {
+	var req []SpecRequest
+	err := c.BindJSON(&req)
+	if err != nil {
+		log.Printf("[ APIServer ] Failed to parse spec request request: " + err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": true,
+			"cause": "Failed to parse spec request request: " + err.Error(),
+		})
+		return
+	}
 
+	nodeNameSet := NewStringSet()
+	for _, v := range req {
+		for _, deploy := range v.Deployments {
+			hash, err := server.findReplicaSetHash(deploy)
+			if err != nil {
+				log.Printf("[ APIServer ] pod-template-hash is not found for deployment {%s}", deploy)
+				// if not found, skip this one for now
+				continue
+			}
+			podList := server.findDeploymentPod(v.Namespace, deploy, hash)
+			for _, p := range podList {
+				nodeNameSet.Add(p.Spec.NodeName)
+			}
+		}
+
+		for _, statefulSet := range v.Statefulsets {
+			podList := server.findStatefulSetPod(v.Namespace, statefulSet)
+			for _, p := range podList {
+				nodeNameSet.Add(p.Spec.NodeName)
+			}
+		}
+	}
+	c.JSON(http.StatusOK, nodeNameSet.ToList())
+}
+
+func (server *APIServer) findReplicaSetHash(deploymentName string) (string, error) {
+	for _, v := range server.ClusterState.ReplicaSets {
+		hash := v.ObjectMeta.Labels["pod-template-hash"]
+		for _, owner := range v.OwnerReferences {
+			if owner.Kind == "Deployment" && owner.Name == deploymentName {
+				return hash, nil
+			}
+		}
+	}
+	return "", errors.New("[ APIServer ] Can't find ReplicaSet Pod-template-hash for Deployment {" + deploymentName + "}")
+}
+
+func (server *APIServer) findDeploymentPod(namespace, deploymentName, hash string) []*v1.Pod {
+	r := []*v1.Pod{}
+	for podName, pod := range server.ClusterState.Pods {
+		if strings.HasPrefix(podName, deploymentName) && strings.Contains(podName, hash) && pod.Namespace == namespace {
+			p := &pod
+			r = append(r, *p)
+		}
+	}
+	if len(r) == 0 {
+		log.Printf("[ APIServer ] Can't find pod for Deployment {%s} in namespace {%s} ", deploymentName, namespace)
+	}
+	return r
+}
+
+func (server *APIServer) findStatefulSetPod(namespace, statefulSetName string) []*v1.Pod {
+	r := []*v1.Pod{}
+	for _, pod := range server.ClusterState.Pods {
+		for _, own := range pod.OwnerReferences {
+			if own.Kind == "StatefulSet" && own.Name == statefulSetName {
+				p := &pod
+				r = append(r, *p)
+			}
+		}
+	}
+	if len(r) == 0 {
+		log.Printf("[ APIServer ] Can't find pod for StatefulSet {%s} in namespace {%s} ", statefulSetName, namespace)
+	}
+	return r
 }
 
 func (server *APIServer) getClusterMapping(c *gin.Context) {
