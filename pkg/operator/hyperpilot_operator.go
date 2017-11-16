@@ -9,6 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/api/v1"
+	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
 )
 
 const (
@@ -32,6 +33,7 @@ type EventProcessor interface {
 	ProcessNode(nodeEvent *NodeEvent)
 	ProcessDaemonSet(daemonSetEvent *DaemonSetEvent)
 	ProcessDeployment(deploymentEvent *DeploymentEvent)
+	ProcessReplicaSet(replicaSetEvent *ReplicaSetEvent)
 }
 
 type EventReceiver struct {
@@ -62,6 +64,11 @@ func (receiver *EventReceiver) Run() {
 				receiver.processor.ProcessDeployment(e.(*DeploymentEvent))
 			}
 
+			_, ok = e.(*ReplicaSetEvent)
+			if ok {
+				receiver.processor.ProcessReplicaSet(e.(*ReplicaSetEvent))
+			}
+
 			// Log unknown event
 		}
 	}()
@@ -72,14 +79,16 @@ func (receiver *EventReceiver) Receive(e Event) {
 }
 
 type ClusterState struct {
-	Nodes map[string]NodeInfo
-	Pods  map[string]*v1.Pod
+	Nodes       map[string]NodeInfo
+	Pods        map[string]*v1.Pod
+	ReplicaSets map[string]*v1beta1.ReplicaSet
 }
 
 func NewClusterState() *ClusterState {
 	return &ClusterState{
-		Nodes: make(map[string]NodeInfo),
-		Pods:  make(map[string]*v1.Pod),
+		Nodes:       make(map[string]NodeInfo),
+		Pods:        make(map[string]*v1.Pod),
+		ReplicaSets: make(map[string]*v1beta1.ReplicaSet),
 	}
 }
 
@@ -88,6 +97,7 @@ type HyperpilotOperator struct {
 	deployInformer    *DeploymentInformer
 	daemonSetInformer *DaemonSetInformer
 	nodeInformer      *NodeInformer
+	rsInformer        *ReplicaSetInformer
 
 	kclient *kubernetes.Clientset
 
@@ -96,12 +106,15 @@ type HyperpilotOperator struct {
 	nodeRegisters      []*EventReceiver
 	daemonSetRegisters []*EventReceiver
 	deployRegisters    []*EventReceiver
+	rsRegisters        []*EventReceiver
 
 	controllers []BaseController
 
 	clusterState *ClusterState
 
 	state int
+
+	config *viper.Viper
 }
 
 // NewHyperpilotOperator creates a new NewHyperpilotOperator
@@ -122,10 +135,12 @@ func NewHyperpilotOperator(kclient *kubernetes.Clientset, controllers []EventPro
 		nodeRegisters:      make([]*EventReceiver, 0),
 		daemonSetRegisters: make([]*EventReceiver, 0),
 		deployRegisters:    make([]*EventReceiver, 0),
+		rsRegisters:        make([]*EventReceiver, 0),
 		controllers:        baseControllers,
 		kclient:            kclient,
 		clusterState:       NewClusterState(),
 		state:              OPERATOR_NOT_RUNNING,
+		config:             config,
 	}
 
 	for i, controller := range controllers {
@@ -161,6 +176,26 @@ func (c *HyperpilotOperator) ProcessPod(e *PodEvent) {
 	}
 }
 
+func (c *HyperpilotOperator) ProcessReplicaSet(e *ReplicaSetEvent) {
+	if e.EventType == ADD {
+		if _, ok := c.clusterState.ReplicaSets[e.Cur.Name]; !ok {
+			c.clusterState.ReplicaSets[e.Cur.Name] = e.Cur
+			log.Printf("[ operator ] Insert new ReplicaSet {%s}", e.Cur.Name)
+		}
+	}
+
+	if e.EventType == DELETE {
+		delete(c.clusterState.ReplicaSets, e.Cur.Name)
+		log.Printf("[ operator ] Delete ReplicaSet {%s},", e.Cur.Name)
+
+	}
+
+	for _, rsRegister := range c.rsRegisters {
+		rsRegister.Receive(e)
+	}
+
+}
+
 // Run starts the process for listening for pod changes and acting upon those changes.
 func (c *HyperpilotOperator) Run(stopCh <-chan struct{}) error {
 	// Lifecycle:
@@ -169,9 +204,11 @@ func (c *HyperpilotOperator) Run(stopCh <-chan struct{}) error {
 	// 1. Register informers
 	c.podInformer = InitPodInformer(c.kclient, c)
 	c.nodeInformer = InitNodeInformer(c.kclient, c)
+	c.rsInformer = InitReplicaSetInformer(c.kclient, c)
 
 	go c.podInformer.indexInformer.Run(stopCh)
 	go c.nodeInformer.indexInformer.Run(stopCh)
+	go c.rsInformer.indexInformer.Run(stopCh)
 
 	// 2. Initialize kubernetes state use KubeAPI get pods, .......
 	nodes, err := c.kclient.Nodes().List(metav1.ListOptions{})
@@ -198,6 +235,15 @@ func (c *HyperpilotOperator) Run(stopCh <-chan struct{}) error {
 		c.clusterState.Pods[pod.Name] = &pod
 	}
 
+	rss, err := c.kclient.ReplicaSets(HYPERPILOT_OPERATOR_NS).List(metav1.ListOptions{})
+	if err != nil {
+		return errors.New("Unable to list ReplicaSet from kubernetes")
+	}
+	for _, r := range rss.Items {
+		rs := r
+		c.clusterState.ReplicaSets[rs.Name] = &rs
+	}
+
 	// 3. Initialize controllers
 	c.state = OPERATOR_INITIALIZING_CONTROLLERS
 
@@ -218,6 +264,12 @@ func (c *HyperpilotOperator) Run(stopCh <-chan struct{}) error {
 
 	c.podInformer.onOperatorReady()
 	c.nodeInformer.onOperatorReady()
+	c.rsInformer.onOperatorReady()
+
+	err = c.InitApiServer()
+	if err != nil {
+		return errors.New("Unable to start API server: " + err.Error())
+	}
 
 	// Wait till we receive a stop signal
 	<-stopCh
@@ -254,4 +306,17 @@ func (c *HyperpilotOperator) accept(processor EventProcessor, resourceEnum Resou
 		c.nodeRegisters = append(c.nodeRegisters, eventReceiver)
 		log.Printf("Contoller {%+v} registered resource NODE", processor)
 	}
+
+	if resourceEnum.IsRegistered(REPLICASET) {
+		c.nodeRegisters = append(c.rsRegisters, eventReceiver)
+		log.Printf("Contoller {%+v} registered resource REPLICASET", processor)
+	}
+}
+
+func (c *HyperpilotOperator) InitApiServer() error {
+	err := NewAPIServer(c.clusterState, c.kclient, c.config).Run()
+	if err != nil {
+		return err
+	}
+	return nil
 }

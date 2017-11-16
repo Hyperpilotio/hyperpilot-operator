@@ -7,6 +7,7 @@ const (
 	DEPLOYMENT ResourceEnum = 2
 	DAEMONSET  ResourceEnum = 4
 	NODE       ResourceEnum = 8
+	REPLICASET ResourceEnum = 16
 )
 
 func (this ResourceEnum) IsRegistered(flag ResourceEnum) bool {

@@ -1,5 +1,9 @@
 {
   "Operator": {},
+  "APIServer": {
+    "Port": "8080",
+    "Debug": false
+  },
   "SnapTaskController": {
     "PluginsList": [
       {
