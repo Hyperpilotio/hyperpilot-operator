@@ -209,7 +209,7 @@ func (server *APIServer) getClusterNodes(c *gin.Context) {
 	var req []SpecRequest
 	err := c.BindJSON(&req)
 	if err != nil {
-		log.Printf("[ APIServer ] Failed to parse spec request request: " + err.Error())
+		log.Printf("[ APIServer ] Failed to parse node request: " + err.Error())
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": true,
 			"cause": "Failed to parse spec request request: " + err.Error(),
@@ -289,17 +289,17 @@ func (server *APIServer) getClusterMapping(c *gin.Context) {
 	req := []string{}
 	err := c.BindJSON(&req)
 	if err != nil {
-		log.Printf("[ APIServer ] Failed to parse spec request request: " + err.Error())
+		log.Printf("[ APIServer ] Failed to parse mapping request: " + err.Error())
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": true,
-			"cause": "Failed to parse spec request request: " + err.Error(),
+			"cause": "Failed to parse mapping request: " + err.Error(),
 		})
 		return
 	}
 
 	namespaceNamesList, err := server.listNamespaces()
 	if err != nil {
-		log.Printf("[ APIServer ] Unable to get all namespace")
+		log.Printf("[ APIServer ] Unable to get all namespace" + err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": true,
 			"cause": "List Namespace Failed: " + err.Error(),
