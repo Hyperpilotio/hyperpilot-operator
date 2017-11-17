@@ -43,7 +43,7 @@ func (server *APIServer) Run() error {
 	{
 		clusterGroup.GET("/specs", server.getClusterSpecs)
 		clusterGroup.GET("/nodes", server.getClusterNodes)
-		clusterGroup.GET("/mapping/:types", server.getClusterMapping)
+		clusterGroup.GET("/mapping", server.getClusterMapping)
 	}
 	router.Group("/actuation")
 
@@ -209,7 +209,7 @@ func (server *APIServer) getClusterNodes(c *gin.Context) {
 	var req []SpecRequest
 	err := c.BindJSON(&req)
 	if err != nil {
-		log.Printf("[ APIServer ] Failed to parse spec request request: " + err.Error())
+		log.Printf("[ APIServer ] Failed to parse node request: " + err.Error())
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": true,
 			"cause": "Failed to parse spec request request: " + err.Error(),
@@ -285,5 +285,135 @@ func (server *APIServer) findStatefulSetPod(namespace, statefulSetName string) [
 }
 
 func (server *APIServer) getClusterMapping(c *gin.Context) {
+	resp := []MappingResponse{}
+	req := []string{}
+	err := c.BindJSON(&req)
+	if err != nil {
+		log.Printf("[ APIServer ] Failed to parse mapping request: " + err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": true,
+			"cause": "Failed to parse mapping request: " + err.Error(),
+		})
+		return
+	}
 
+	namespaceNamesList, err := server.listNamespaces()
+	if err != nil {
+		log.Printf("[ APIServer ] Unable to get all namespace" + err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": true,
+			"cause": "List Namespace Failed: " + err.Error(),
+		})
+		return
+	}
+
+	for _, namespaceName := range namespaceNamesList {
+		var deploymentResponse *[]string
+		var serviceResponse *[]string
+		var statefulsetResponse *[]string
+
+		for _, Type := range req {
+			switch Type {
+			case "deployments":
+				deploymentResponse, err = server.listDeployments(namespaceName)
+				if err != nil {
+					log.Printf("[ APIServer ] Unable to get all deployment for namespace %s: %s", namespaceName, err.Error())
+					c.JSON(http.StatusInternalServerError, gin.H{
+						"error": true,
+						"cause": "List Deployments Failed: " + err.Error(),
+					})
+					return
+				}
+			case "statefulsets":
+				statefulsetResponse, err = server.listStatefulSets(namespaceName)
+				if err != nil {
+					log.Printf("[ APIServer ] Unable to get all StatefulSet for namespace %s: %s", namespaceName, err.Error())
+					c.JSON(http.StatusInternalServerError, gin.H{
+						"error": true,
+						"cause": "List StatefulSets Failed: " + err.Error(),
+					})
+					return
+				}
+			case "services":
+				serviceResponse, err = server.listServices(namespaceName)
+				if err != nil {
+					log.Printf("[ APIServer ] Unable to get all Services for namespace %s: %s", namespaceName, err.Error())
+					c.JSON(http.StatusInternalServerError, gin.H{
+						"error": true,
+						"cause": "List Services Failed: " + err.Error(),
+					})
+					return
+				}
+			default:
+				log.Print("Unsupport resource type {%s}", Type)
+				c.JSON(http.StatusBadRequest, gin.H{
+					"error": true,
+					"cause": "Unsupported resource type: " + Type,
+				})
+				return
+			}
+		}
+
+		resp = append(resp, MappingResponse{
+			Namespace:    namespaceName,
+			Deployments:  deploymentResponse,
+			Services:     serviceResponse,
+			Statefulsets: statefulsetResponse,
+		})
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+func (server *APIServer) listNamespaces() ([]string, error) {
+	namespaceNames := []string{}
+	d, err := server.K8sClient.CoreV1Client.Namespaces().List(metav1.ListOptions{})
+	if err != nil {
+		log.Printf("[ APIServer ] List Namespaces fail: " + err.Error())
+		return nil, err
+	}
+	for _, namespace := range d.Items {
+		namespaceNames = append(namespaceNames, namespace.Name)
+	}
+	return namespaceNames, nil
+}
+
+func (server *APIServer) listDeployments(namespaceName string) (*[]string, error) {
+	deploymentNames := []string{}
+	d, err := server.K8sClient.ExtensionsV1beta1Client.Deployments(namespaceName).List(metav1.ListOptions{})
+	if err != nil {
+		log.Printf("[ APIServer ] List Deployments fail: " + err.Error())
+		return nil, err
+	}
+
+	for _, deploy := range d.Items {
+		deploymentNames = append(deploymentNames, deploy.Name)
+	}
+	return &deploymentNames, nil
+}
+
+func (server *APIServer) listStatefulSets(namespaceName string) (*[]string, error) {
+	statefulSetNames := []string{}
+	d, err := server.K8sClient.AppsV1beta1Client.StatefulSets(namespaceName).List(metav1.ListOptions{})
+	if err != nil {
+		log.Printf("[ APIServer ] List StatefulSets fail: " + err.Error())
+		return nil, err
+	}
+
+	for _, stateful := range d.Items {
+		statefulSetNames = append(statefulSetNames, stateful.Name)
+	}
+	return &statefulSetNames, nil
+}
+
+func (server *APIServer) listServices(namespaceName string) (*[]string, error) {
+	serviceNames := []string{}
+	d, err := server.K8sClient.CoreV1Client.Services(namespaceName).List(metav1.ListOptions{})
+	if err != nil {
+		log.Printf("[ APIServer ] List Services fail: " + err.Error())
+		return nil, err
+	}
+	for _, service := range d.Items {
+		serviceNames = append(serviceNames, service.Name)
+	}
+	return &serviceNames, nil
 }

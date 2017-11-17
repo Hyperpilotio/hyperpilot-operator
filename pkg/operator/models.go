@@ -34,3 +34,10 @@ type StatefulSetResponse struct {
 	Name            string                  `json:"name"`
 	StatefulSetSpec *appv1beta1.StatefulSet `json:"k8s_spec"`
 }
+
+type MappingResponse struct {
+	Namespace    string    `json:"namespace"`
+	Deployments  *[]string `json:"deployments,omitempty"`
+	Services     *[]string `json:"services,omitempty"`
+	Statefulsets *[]string `json:"statefulsets,omitempty"`
+}
