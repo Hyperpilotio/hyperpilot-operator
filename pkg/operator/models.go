@@ -36,15 +36,8 @@ type StatefulSetResponse struct {
 }
 
 type MappingResponse struct {
-	Namespace    string   `json:"namespace"`
-	Deployments  []string `json:"deployments,omitempty"`
-	Services     []string `json:"services,omitempty"`
-	Statefulsets []string `json:"statefulsets,omitempty"`
+	Namespace    string    `json:"namespace"`
+	Deployments  *[]string `json:"deployments,omitempty"`
+	Services     *[]string `json:"services,omitempty"`
+	Statefulsets *[]string `json:"statefulsets,omitempty"`
 }
-
-//type MappingResponse struct {
-//	Namespace    string   `json:"namespace"`
-//	Deployments  []string `json:"deployments"`
-//	Services     []string `json:"services"`
-//	Statefulsets []string `json:"statefulsets"`
-//}

@@ -308,9 +308,9 @@ func (server *APIServer) getClusterMapping(c *gin.Context) {
 	}
 
 	for _, namespaceName := range namespaceNamesList {
-		var deploymentResponse []string
-		var serviceResponse []string
-		var statefulsetResponse []string
+		var deploymentResponse *[]string
+		var serviceResponse *[]string
+		var statefulsetResponse *[]string
 
 		for _, Type := range req {
 			switch Type {
@@ -377,10 +377,8 @@ func (server *APIServer) listNamespaces() ([]string, error) {
 	return namespaceNames, nil
 }
 
-func (server *APIServer) listDeployments(namespaceName string) ([]string, error) {
+func (server *APIServer) listDeployments(namespaceName string) (*[]string, error) {
 	deploymentNames := []string{}
-	//deploymentNames := make([]string, 0)
-
 	d, err := server.K8sClient.ExtensionsV1beta1Client.Deployments(namespaceName).List(metav1.ListOptions{})
 	if err != nil {
 		log.Printf("[ APIServer ] List Deployments fail: " + err.Error())
@@ -390,12 +388,11 @@ func (server *APIServer) listDeployments(namespaceName string) ([]string, error)
 	for _, deploy := range d.Items {
 		deploymentNames = append(deploymentNames, deploy.Name)
 	}
-	return deploymentNames, nil
+	return &deploymentNames, nil
 }
 
-func (server *APIServer) listStatefulSets(namespaceName string) ([]string, error) {
+func (server *APIServer) listStatefulSets(namespaceName string) (*[]string, error) {
 	statefulSetNames := []string{}
-	//statefulSetNames := make([]string, 0)
 	d, err := server.K8sClient.AppsV1beta1Client.StatefulSets(namespaceName).List(metav1.ListOptions{})
 	if err != nil {
 		log.Printf("[ APIServer ] List StatefulSets fail: " + err.Error())
@@ -405,13 +402,11 @@ func (server *APIServer) listStatefulSets(namespaceName string) ([]string, error
 	for _, stateful := range d.Items {
 		statefulSetNames = append(statefulSetNames, stateful.Name)
 	}
-	return statefulSetNames, nil
+	return &statefulSetNames, nil
 }
 
-func (server *APIServer) listServices(namespaceName string) ([]string, error) {
+func (server *APIServer) listServices(namespaceName string) (*[]string, error) {
 	serviceNames := []string{}
-	//serviceNames := make([]string, 0)
-
 	d, err := server.K8sClient.CoreV1Client.Services(namespaceName).List(metav1.ListOptions{})
 	if err != nil {
 		log.Printf("[ APIServer ] List Services fail: " + err.Error())
@@ -420,5 +415,5 @@ func (server *APIServer) listServices(namespaceName string) ([]string, error) {
 	for _, service := range d.Items {
 		serviceNames = append(serviceNames, service.Name)
 	}
-	return serviceNames, nil
+	return &serviceNames, nil
 }
