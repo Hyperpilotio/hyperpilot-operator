@@ -134,3 +134,27 @@
     ]
     ```
 
+## /cluster/appmetrics
+
+* GET
+
+* request body
+    ```json
+    { 
+       "k8sType": "deployment", 
+       "name": "goddd", 
+       "namespace": "default", 
+       "prometheus": { 
+           "metricPort": 8080 
+       } 
+    }
+
+    ```
+    
+* response
+
+    ```json
+    { 
+      "metrics": [ "app_goddd..." ] 
+    }
+    ```

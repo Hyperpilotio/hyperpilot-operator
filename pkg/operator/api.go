@@ -44,6 +44,7 @@ func (server *APIServer) Run() error {
 		clusterGroup.GET("/specs", server.getClusterSpecs)
 		clusterGroup.GET("/nodes", server.getClusterNodes)
 		clusterGroup.GET("/mapping", server.getClusterMapping)
+		clusterGroup.GET("/appmetrics", server.getClusterAppMetrics)
 	}
 	router.Group("/actuation")
 
@@ -416,4 +417,8 @@ func (server *APIServer) listServices(namespaceName string) (*[]string, error) {
 		serviceNames = append(serviceNames, service.Name)
 	}
 	return &serviceNames, nil
+}
+
+func (server *APIServer) getClusterAppMetrics(c *gin.Context) {
+
 }
