@@ -80,6 +80,11 @@ func (server *APIServer) getClusterSpecs(c *gin.Context) {
 			return
 		}
 		for k, v := range allDeployment {
+			if v != nil {
+				v.TypeMeta = metav1.TypeMeta{
+					Kind: "Deployment",
+				}
+			}
 			deploymentResponse = append(deploymentResponse,
 				DeploymentResponse{
 					Name:           k,
@@ -98,6 +103,11 @@ func (server *APIServer) getClusterSpecs(c *gin.Context) {
 			return
 		}
 		for k, v := range allService {
+			if v != nil {
+				v.TypeMeta = metav1.TypeMeta{
+					Kind: "Service",
+				}
+			}
 			serviceResponse = append(serviceResponse,
 				ServiceResponse{
 					Name:        k,
@@ -116,6 +126,11 @@ func (server *APIServer) getClusterSpecs(c *gin.Context) {
 			return
 		}
 		for k, v := range allStateful {
+			if v != nil {
+				v.TypeMeta = metav1.TypeMeta{
+					Kind: "StatefulSet",
+				}
+			}
 			statefulsetResponse = append(statefulsetResponse,
 				StatefulSetResponse{
 					Name:            k,
