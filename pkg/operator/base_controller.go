@@ -1,5 +1,7 @@
 package operator
 
+import "github.com/hyperpilotio/hyperpilot-operator/pkg/common"
+
 type ResourceEnum int
 
 const (
@@ -15,6 +17,6 @@ func (this ResourceEnum) IsRegistered(flag ResourceEnum) bool {
 }
 
 type BaseController interface {
-	Init(clusterState *ClusterState) error
+	Init(clusterState *common.ClusterState) error
 	GetResourceEnum() ResourceEnum
 }

@@ -5,6 +5,7 @@ import (
 	"log"
 	"sync"
 
+	"github.com/hyperpilotio/hyperpilot-operator/pkg/common"
 	"github.com/spf13/viper"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -21,12 +22,6 @@ const (
 	OPERATOR_INITIALIZING_CONTROLLERS = 1
 	OPERATOR_RUNNING                  = 2
 )
-
-type NodeInfo struct {
-	NodeName   string
-	ExternalIP string
-	InternalIP string
-}
 
 type EventProcessor interface {
 	ProcessPod(podEvent *PodEvent)
@@ -78,15 +73,9 @@ func (receiver *EventReceiver) Receive(e Event) {
 	receiver.eventsChan <- e
 }
 
-type ClusterState struct {
-	Nodes       map[string]NodeInfo
-	Pods        map[string]*v1.Pod
-	ReplicaSets map[string]*v1beta1.ReplicaSet
-}
-
-func NewClusterState() *ClusterState {
-	return &ClusterState{
-		Nodes:       make(map[string]NodeInfo),
+func NewClusterState() *common.ClusterState {
+	return &common.ClusterState{
+		Nodes:       make(map[string]common.NodeInfo),
 		Pods:        make(map[string]*v1.Pod),
 		ReplicaSets: make(map[string]*v1beta1.ReplicaSet),
 	}
@@ -110,7 +99,7 @@ type HyperpilotOperator struct {
 
 	controllers []BaseController
 
-	clusterState *ClusterState
+	clusterState *common.ClusterState
 
 	state int
 
@@ -217,7 +206,7 @@ func (c *HyperpilotOperator) Run(stopCh <-chan struct{}) error {
 	}
 
 	for _, n := range nodes.Items {
-		a := NodeInfo{
+		a := common.NodeInfo{
 			NodeName:   n.Name,
 			ExternalIP: n.Status.Addresses[1].Address,
 			InternalIP: n.Status.Addresses[0].Address,
