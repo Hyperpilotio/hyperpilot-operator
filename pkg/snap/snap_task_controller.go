@@ -1,13 +1,16 @@
 package snap
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/hyperpilotio/hyperpilot-operator/pkg/operator"
 	"github.com/spf13/viper"
+	"gopkg.in/resty.v1"
 	"k8s.io/client-go/pkg/api/v1"
 )
 
@@ -130,6 +133,7 @@ func (s *SnapTaskController) Init(clusterState *operator.ClusterState) error {
 			}
 		}
 	}
+	go s.pollingAnalyzer()
 	return nil
 }
 
@@ -317,6 +321,106 @@ func isSnapPod(pod *v1.Pod) bool {
 		return true
 	}
 	return false
+}
+
+func (s *SnapTaskController) pollingAnalyzer() {
+	tick := time.Tick(3 * time.Second)
+	for {
+		select {
+		case <-tick:
+			analyzerURL := fmt.Sprintf("%s%s%s%d%s",
+				"http://", s.config.GetString("SnapTaskController.Analyzer.Address"),
+				":", s.config.GetInt("SnapTaskController.Analyzer.Port"), API_APPS)
+
+			log.Print(analyzerURL)
+
+			appResp := AppResponses{}
+			resp, err := resty.R().Get(analyzerURL)
+			if err != nil {
+				log.Print("http GET error: " + err.Error())
+				return
+			}
+			err = json.Unmarshal(resp.Body(), &appResp)
+			if err != nil {
+				log.Print("JSON parse error: " + err.Error())
+				return
+			}
+			s.checkApplications(appResp.Data)
+		}
+	}
+}
+
+func (s *SnapTaskController) checkApplications(appResps []AppResponse) {
+	analyzerURL := fmt.Sprintf("%s%s%s%d%s",
+		"http://", s.config.GetString("SnapTaskController.Analyzer.Address"),
+		":", s.config.GetInt("SnapTaskController.Analyzer.Port"), API_K8SSERVICES)
+
+	svcResp := ServiceResponse{}
+
+	for _, app := range appResps {
+		//todo: compare applications list
+
+		log.Printf("APPID: %s", app.AppID)
+		for _, svc := range app.Microservices {
+			log.Printf("SERVICE: %s, %s", svc.Name, svc.ServiceID)
+
+			serviceURL := analyzerURL + "/" + svc.ServiceID
+
+			resp, err := resty.R().Get(serviceURL)
+			if err != nil {
+				log.Print("http GET error: " + err.Error())
+				return
+			}
+
+			log.Printf("%s", resp.Body())
+			err = json.Unmarshal(resp.Body(), &svcResp)
+			if err != nil {
+				log.Print("JSON parse error: " + err.Error())
+				return
+			}
+
+			switch svcResp.Kind {
+			case "Deployment":
+				deployResponse := K8sDeploymentResponse{}
+				err = json.Unmarshal(resp.Body(), &deployResponse)
+				if err != nil {
+					log.Print("JSON parse error: " + err.Error())
+					return
+				}
+				log.Printf("deployment: %s, %s, %s",
+					deployResponse.Data.Name, deployResponse.Data.Namespace, deployResponse.Kind)
+
+				// find targetd pod location, and update RunningServicePods
+
+			case "Service":
+				serviceResponse := K8sServiceResponse{}
+				err = json.Unmarshal(resp.Body(), &serviceResponse)
+
+				if err != nil {
+					log.Print("JSON parse error: " + err.Error())
+					return
+				}
+				log.Printf("deployment: %s, %s, %s",
+					serviceResponse.Data.Name, serviceResponse.Data.Namespace, serviceResponse.Kind)
+
+			case "StatefulSet":
+				statefulResponse := K8sStatefulSetResponse{}
+				err = json.Unmarshal(resp.Body(), &statefulResponse)
+				if err != nil {
+					log.Print("JSON parse error: " + err.Error())
+					return
+				}
+				log.Printf("deployment: %s, %s, %s",
+					statefulResponse.Data.Name, statefulResponse.Data.Namespace, statefulResponse.Kind)
+			default:
+				log.Printf("not support")
+
+			}
+		}
+	}
+
+	// for each node do reconcileSnapState
+
 }
 
 func (s *SnapTaskController) ProcessDeployment(e *operator.DeploymentEvent) {}

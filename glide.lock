@@ -156,6 +156,7 @@ imports:
   - http2/hpack
   - idna
   - lex/httplex
+  - publicsuffix
 - name: golang.org/x/sys
   version: 8f0908ab3b2457e2e15403d3697c9ef5cb4b57a9
   subpackages:
@@ -304,4 +305,6 @@ imports:
   - util/flowcontrol
   - util/homedir
   - util/integer
-testImports: []
+testImports:
+- name: gopkg.in/resty.v1
+  version: 9ac9c42358f7c3c69ac9f8610e8790d7c338e85d

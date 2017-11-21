@@ -20,6 +20,10 @@
     "ServiceList": [
       "resource-worker"
     ],
+    "Analyzer": {
+      "Address": "localhost",
+      "Port": 5000
+    },
     "influxdb": {
       "host": "influxsrv.hyperpilot",
       "port": 8086,
