@@ -28,7 +28,7 @@ type SnapNode struct {
 	RunningServicePods map[string]ServicePodInfo
 	PodEvents          chan *operator.PodEvent
 	ExitChan           chan bool
-	ServiceList        []string
+	ServiceList        *[]string
 	config             *viper.Viper
 }
 
@@ -104,7 +104,7 @@ func getTaskIDFromTaskName(manager *TaskManager, name string) (string, error) {
 	return "", errors.New("Can not find ID from Name")
 }
 
-func NewSnapNode(nodeName string, externalIp string, serviceList []string, config *viper.Viper) *SnapNode {
+func NewSnapNode(nodeName string, externalIp string, serviceList *[]string, config *viper.Viper) *SnapNode {
 	return &SnapNode{
 		NodeId:             nodeName,
 		ExternalIP:         externalIp,
@@ -123,7 +123,7 @@ func (s *SnapTaskController) Init(clusterState *common.ClusterState) error {
 	for _, n := range clusterState.Nodes {
 		for _, p := range clusterState.Pods {
 			if p.Spec.NodeName == n.NodeName && isSnapPod(p) {
-				snapNode := NewSnapNode(n.NodeName, n.ExternalIP, s.ServiceList, s.config)
+				snapNode := NewSnapNode(n.NodeName, n.ExternalIP, &s.ServiceList, s.config)
 				init, err := snapNode.init(s.isOutsideCluster, clusterState)
 				if !init {
 					log.Printf("[ SnapTaskController ] Snap is not found in the cluster for node during init: %s", n.NodeName)
@@ -233,7 +233,7 @@ func (s *SnapTaskController) ProcessPod(e *operator.PodEvent) {
 			node, ok := s.Nodes[nodeName]
 			if !ok {
 				if isSnapPod(e.Cur) {
-					newNode := NewSnapNode(nodeName, s.ClusterState.Nodes[nodeName].ExternalIP, s.ServiceList, s.config)
+					newNode := NewSnapNode(nodeName, s.ClusterState.Nodes[nodeName].ExternalIP, &s.ServiceList, s.config)
 					log.Printf("[ SnapTaskController ] Create new SnapNode in {%s}.", newNode.NodeId)
 					s.Nodes[nodeName] = newNode
 					go func() {
@@ -311,7 +311,7 @@ func (s *SnapTaskController) String() string {
 }
 
 func (node *SnapNode) isServicePod(pod *v1.Pod) bool {
-	for _, service := range node.ServiceList {
+	for _, service := range *node.ServiceList {
 		if strings.HasPrefix(pod.Name, service) {
 			return true
 		}
@@ -361,10 +361,12 @@ func (s *SnapTaskController) checkApplications(appResps []AppResponse) {
 		return
 	}
 	if !s.isAppSetChange(appResps) {
+		log.Printf("Appliction Set not change")
 		return
 	}
 	log.Printf("Application Set change")
 
+	s.ServiceList = s.ServiceList[:0]
 	// app set is empty
 	if len(appResps) == 0 {
 		pods := []*v1.Pod{}
@@ -400,6 +402,7 @@ func (s *SnapTaskController) checkApplications(appResps []AppResponse) {
 					continue
 				}
 				pods := s.ClusterState.FindDeploymentPod(deployResponse.Data.Namespace, deployResponse.Data.Name, hash)
+				s.updateServiceList(deployResponse.Data.Name)
 				s.updateRunningServicePods(pods)
 			case "StatefulSet":
 				statefulResponse := K8sStatefulSetResponse{}
@@ -409,8 +412,8 @@ func (s *SnapTaskController) checkApplications(appResps []AppResponse) {
 					return
 				}
 				pods := s.ClusterState.FindStatefulSetPod(statefulResponse.Data.Namespace, statefulResponse.Data.Name)
+				s.updateServiceList(statefulResponse.Data.Name)
 				s.updateRunningServicePods(pods)
-
 			default:
 				log.Printf("Not supported service kind {%s}", svcResp.Kind)
 			}
@@ -419,7 +422,6 @@ func (s *SnapTaskController) checkApplications(appResps []AppResponse) {
 	s.reconcileSnapState()
 }
 
-//todo: update SnapTaskController & SnapNode ServiceList ??
 func (s *SnapTaskController) updateRunningServicePods(pods []*v1.Pod) {
 	//add
 	for _, p := range pods {
@@ -443,6 +445,11 @@ func (s *SnapTaskController) updateRunningServicePods(pods []*v1.Pod) {
 			}
 		}
 	}
+}
+
+// todo: overwrite by analyzer api result
+func (s *SnapTaskController) updateServiceList(deployName string) {
+	s.ServiceList = append(s.ServiceList, deployName)
 }
 
 func isExist(pods []*v1.Pod, podName string) bool {
