@@ -30,3 +30,15 @@ func (set *StringSet) ToList() []string {
 	}
 	return r
 }
+
+func (set1 *StringSet) IsIdentical(set2 *StringSet) bool {
+	if len(set1.set) != len(set2.set) {
+		return false
+	}
+	for k := range set2.set {
+		if !set1.IsExist(k) {
+			return false
+		}
+	}
+	return true
+}
