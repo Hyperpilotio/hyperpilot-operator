@@ -21,6 +21,7 @@
       "resource-worker"
     ],
     "Analyzer": {
+      "Enable": true,
       "Address": "localhost",
       "Port": 5000
     },

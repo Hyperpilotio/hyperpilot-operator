@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hyperpilotio/hyperpilot-operator/pkg/common"
@@ -24,7 +25,9 @@ type SnapNode struct {
 	NodeId             string
 	ExternalIP         string
 	TaskManager        *TaskManager
+	snapTaskMx         *sync.Mutex
 	SnapTasks          map[string]string
+	runningPodsMx      *sync.Mutex
 	RunningServicePods map[string]ServicePodInfo
 	PodEvents          chan *operator.PodEvent
 	ExitChan           chan bool
@@ -35,6 +38,7 @@ type SnapNode struct {
 type SnapTaskController struct {
 	isOutsideCluster bool
 	ServiceList      []string
+	snapNodeMx       *sync.Mutex
 	Nodes            map[string]*SnapNode
 	ClusterState     *common.ClusterState
 	config           *viper.Viper
@@ -44,6 +48,7 @@ type SnapTaskController struct {
 func NewSnapTaskController(runOutsideCluster bool, config *viper.Viper) *SnapTaskController {
 	return &SnapTaskController{
 		ServiceList:      config.GetStringSlice("SnapTaskController.ServiceList"),
+		snapNodeMx:       &sync.Mutex{},
 		Nodes:            make(map[string]*SnapNode),
 		isOutsideCluster: runOutsideCluster,
 		config:           config,
@@ -56,6 +61,11 @@ func (s *SnapTaskController) GetResourceEnum() operator.ResourceEnum {
 }
 
 func (node *SnapNode) reconcileSnapState() error {
+	node.runningPodsMx.Lock()
+	defer node.runningPodsMx.Unlock()
+	node.snapTaskMx.Lock()
+	defer node.snapTaskMx.Unlock()
+
 	for servicePodName, podInfo := range node.RunningServicePods {
 		_, ok := node.SnapTasks[servicePodName]
 		if !ok {
@@ -108,7 +118,9 @@ func NewSnapNode(nodeName string, externalIp string, serviceList *[]string, conf
 	return &SnapNode{
 		NodeId:             nodeName,
 		ExternalIP:         externalIp,
+		runningPodsMx:      &sync.Mutex{},
 		RunningServicePods: make(map[string]ServicePodInfo),
+		snapTaskMx:         &sync.Mutex{},
 		SnapTasks:          make(map[string]string),
 		TaskManager:        nil,
 		PodEvents:          make(chan *operator.PodEvent, 1000),
@@ -120,6 +132,8 @@ func NewSnapNode(nodeName string, externalIp string, serviceList *[]string, conf
 
 func (s *SnapTaskController) Init(clusterState *common.ClusterState) error {
 	s.ClusterState = clusterState
+
+	s.ClusterState.Lock.RLock()
 	for _, n := range clusterState.Nodes {
 		for _, p := range clusterState.Pods {
 			if p.Spec.NodeName == n.NodeName && isSnapPod(p) {
@@ -131,16 +145,26 @@ func (s *SnapTaskController) Init(clusterState *common.ClusterState) error {
 				} else if err != nil {
 					log.Printf("[ SnapTaskController ] Unable to init snap for node %s: %s", n.NodeName, err.Error())
 				} else {
+					s.snapNodeMx.Lock()
 					s.Nodes[n.NodeName] = snapNode
+					s.snapNodeMx.Unlock()
 				}
 			}
 		}
 	}
-	go s.pollingAnalyzer()
+	s.ClusterState.Lock.RUnlock()
+
+	if s.config.GetBool("SnapTaskController.Analyzer.Enable") {
+		log.Printf("[ SnapTaskController ] Poll Analyzer is enabled")
+		go s.pollingAnalyzer()
+	}
 	return nil
 }
 
 func (n *SnapNode) init(isOutsideCluster bool, clusterState *common.ClusterState) (bool, error) {
+	clusterState.Lock.RLock()
+	defer clusterState.Lock.RUnlock()
+
 	for _, p := range clusterState.Pods {
 		if n.NodeId == p.Spec.NodeName && isSnapPod(p) {
 			if err := n.initSnap(isOutsideCluster, p, clusterState); err != nil {
@@ -185,6 +209,7 @@ func (n *SnapNode) initSnap(isOutsideCluster bool, snapPod *v1.Pod, clusterState
 		}
 	}
 
+	clusterState.Lock.RLock()
 	for _, p := range clusterState.Pods {
 		if p.Spec.NodeName == n.NodeId && n.isServicePod(p) {
 			// TODO: How do we know which container has the right port? and which port?
@@ -197,6 +222,7 @@ func (n *SnapNode) initSnap(isOutsideCluster bool, snapPod *v1.Pod, clusterState
 			}
 		}
 	}
+	clusterState.Lock.RUnlock()
 
 	n.reconcileSnapState()
 	n.Run(isOutsideCluster)
@@ -204,6 +230,9 @@ func (n *SnapNode) initSnap(isOutsideCluster bool, snapPod *v1.Pod, clusterState
 }
 
 func (s *SnapTaskController) ProcessPod(e *operator.PodEvent) {
+	s.snapNodeMx.Lock()
+	defer s.snapNodeMx.Unlock()
+
 	switch e.EventType {
 	case operator.DELETE:
 		if e.Cur.Status.Phase != "Running" {
@@ -264,10 +293,12 @@ func (n *SnapNode) Run(isOutsideCluster bool) {
 				switch e.EventType {
 				case operator.ADD, operator.UPDATE:
 					container := e.Cur.Spec.Containers[0]
+					n.runningPodsMx.Lock()
 					n.RunningServicePods[e.Cur.Name] = ServicePodInfo{
 						Namespace: e.Cur.Namespace,
 						Port:      container.Ports[0].HostPort,
 					}
+					n.runningPodsMx.Unlock()
 					if err := n.reconcileSnapState(); err != nil {
 						log.Printf("Unable to reconcile snap state: %s", err.Error())
 						return
@@ -276,7 +307,9 @@ func (n *SnapNode) Run(isOutsideCluster bool) {
 
 				case operator.DELETE:
 					if _, ok := n.RunningServicePods[e.Cur.Name]; ok {
+						n.runningPodsMx.Lock()
 						delete(n.RunningServicePods, e.Cur.Name)
+						n.runningPodsMx.Unlock()
 						if err := n.reconcileSnapState(); err != nil {
 							log.Printf("Unable to reconcile snap state: %s", err.Error())
 							return
@@ -361,17 +394,16 @@ func (s *SnapTaskController) checkApplications(appResps []AppResponse) {
 		return
 	}
 	if !s.isAppSetChange(appResps) {
-		log.Printf("Appliction Set not change")
 		return
 	}
-	log.Printf("Application Set change")
+	log.Printf("[ SnapTaskController ] Application Set change")
 
-	s.ServiceList = s.ServiceList[:0]
 	// app set is empty
 	if len(appResps) == 0 {
 		pods := []*v1.Pod{}
 		s.updateRunningServicePods(pods)
 	}
+
 	// app set not empty
 	for _, app := range appResps {
 		for _, svc := range app.Microservices {
@@ -428,10 +460,12 @@ func (s *SnapTaskController) updateRunningServicePods(pods []*v1.Pod) {
 		snapNode := s.Nodes[p.Spec.NodeName]
 		container := p.Spec.Containers[0]
 		if _, ok := snapNode.RunningServicePods[p.Name]; !ok {
+			snapNode.runningPodsMx.Lock()
 			snapNode.RunningServicePods[p.Name] = ServicePodInfo{
 				Namespace: p.Namespace,
 				Port:      container.Ports[0].HostPort,
 			}
+			snapNode.runningPodsMx.Unlock()
 			log.Printf("add Running Service Pod {%s} in Node {%s}. ", p.Name, snapNode.NodeId)
 		}
 	}
@@ -439,20 +473,23 @@ func (s *SnapTaskController) updateRunningServicePods(pods []*v1.Pod) {
 	//del
 	for _, snapNode := range s.Nodes {
 		for podName := range snapNode.RunningServicePods {
-			if !isExist(pods, podName) {
+			if !containPod(pods, podName) {
+				snapNode.runningPodsMx.Lock()
 				delete(snapNode.RunningServicePods, podName)
+				snapNode.runningPodsMx.Unlock()
 				log.Printf("delete Running Service Pod {%s} in Node {%s} ", podName, snapNode.NodeId)
 			}
 		}
 	}
 }
 
-// todo: overwrite by analyzer api result
+// todo: lock!
+// todo: check overwrite by analyzer result
 func (s *SnapTaskController) updateServiceList(deployName string) {
 	s.ServiceList = append(s.ServiceList, deployName)
 }
 
-func isExist(pods []*v1.Pod, podName string) bool {
+func containPod(pods []*v1.Pod, podName string) bool {
 	for _, pod := range pods {
 		if podName == pod.Name {
 			return true
@@ -461,8 +498,6 @@ func isExist(pods []*v1.Pod, podName string) bool {
 	return false
 }
 
-// true : change
-// false : no change
 func (s *SnapTaskController) isAppSetChange(appResps []AppResponse) bool {
 	app_set := common.NewStringSet()
 	for _, app := range appResps {
@@ -478,11 +513,16 @@ func (s *SnapTaskController) isAppSetChange(appResps []AppResponse) bool {
 	}
 }
 
-// true : ready
-// false : not ready
 func (s *SnapTaskController) isSnapNodeReady() bool {
+	s.ClusterState.Lock.RLock()
+	defer s.ClusterState.Lock.RUnlock()
+
 	for nodeName := range s.ClusterState.Nodes {
 		if s.Nodes[nodeName] == nil {
+			return false
+		}
+
+		if s.Nodes[nodeName].TaskManager.isReady() == false {
 			return false
 		}
 	}

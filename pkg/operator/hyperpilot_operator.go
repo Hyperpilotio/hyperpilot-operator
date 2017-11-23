@@ -7,10 +7,7 @@ import (
 
 	"github.com/hyperpilotio/hyperpilot-operator/pkg/common"
 	"github.com/spf13/viper"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/pkg/api/v1"
-	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
 )
 
 const (
@@ -73,14 +70,6 @@ func (receiver *EventReceiver) Receive(e Event) {
 	receiver.eventsChan <- e
 }
 
-func NewClusterState() *common.ClusterState {
-	return &common.ClusterState{
-		Nodes:       make(map[string]common.NodeInfo),
-		Pods:        make(map[string]*v1.Pod),
-		ReplicaSets: make(map[string]*v1beta1.ReplicaSet),
-	}
-}
-
 type HyperpilotOperator struct {
 	podInformer       *PodInformer
 	deployInformer    *DeploymentInformer
@@ -127,7 +116,7 @@ func NewHyperpilotOperator(kclient *kubernetes.Clientset, controllers []EventPro
 		rsRegisters:        make([]*EventReceiver, 0),
 		controllers:        baseControllers,
 		kclient:            kclient,
-		clusterState:       NewClusterState(),
+		clusterState:       common.NewClusterState(),
 		state:              OPERATOR_NOT_RUNNING,
 		config:             config,
 	}
@@ -146,6 +135,7 @@ func (c *HyperpilotOperator) ProcessDeployment(e *DeploymentEvent) {}
 func (c *HyperpilotOperator) ProcessNode(e *NodeEvent) {}
 
 func (c *HyperpilotOperator) ProcessPod(e *PodEvent) {
+	c.clusterState.Lock.Lock()
 	if e.EventType == DELETE {
 		delete(c.clusterState.Pods, e.Cur.Name)
 		log.Printf("[ operator ] Delete Pod {%s}", e.Cur.Name)
@@ -159,6 +149,7 @@ func (c *HyperpilotOperator) ProcessPod(e *PodEvent) {
 			log.Printf("[ operator ] Insert NEW Pod {%s}", e.Cur.Name)
 		}
 	}
+	c.clusterState.Lock.Unlock()
 
 	for _, podRegister := range c.podRegisters {
 		podRegister.Receive(e)
@@ -166,6 +157,7 @@ func (c *HyperpilotOperator) ProcessPod(e *PodEvent) {
 }
 
 func (c *HyperpilotOperator) ProcessReplicaSet(e *ReplicaSetEvent) {
+	c.clusterState.Lock.Lock()
 	if e.EventType == ADD {
 		if _, ok := c.clusterState.ReplicaSets[e.Cur.Name]; !ok {
 			c.clusterState.ReplicaSets[e.Cur.Name] = e.Cur
@@ -178,6 +170,7 @@ func (c *HyperpilotOperator) ProcessReplicaSet(e *ReplicaSetEvent) {
 		log.Printf("[ operator ] Delete ReplicaSet {%s},", e.Cur.Name)
 
 	}
+	c.clusterState.Lock.Unlock()
 
 	for _, rsRegister := range c.rsRegisters {
 		rsRegister.Receive(e)
@@ -199,38 +192,21 @@ func (c *HyperpilotOperator) Run(stopCh <-chan struct{}) error {
 	go c.nodeInformer.indexInformer.Run(stopCh)
 	go c.rsInformer.indexInformer.Run(stopCh)
 
-	// 2. Initialize kubernetes state use KubeAPI get pods, .......
-	nodes, err := c.kclient.Nodes().List(metav1.ListOptions{})
+	// 2. Initialize clusterState state use KubeAPI get pods, .......
+
+	err := c.clusterState.PopulateNodeInfo(c.kclient)
 	if err != nil {
 		return errors.New("Unable to list nodes from kubernetes: " + err.Error())
 	}
 
-	for _, n := range nodes.Items {
-		a := common.NodeInfo{
-			NodeName:   n.Name,
-			ExternalIP: n.Status.Addresses[1].Address,
-			InternalIP: n.Status.Addresses[0].Address,
-		}
-		c.clusterState.Nodes[a.NodeName] = a
-	}
-
-	pods, err := c.kclient.Pods(HYPERPILOT_OPERATOR_NS).List(metav1.ListOptions{})
+	err = c.clusterState.PopulatePods(c.kclient)
 	if err != nil {
 		return errors.New("Unable to list pods from kubernetes")
 	}
 
-	for _, p := range pods.Items {
-		pod := p
-		c.clusterState.Pods[pod.Name] = &pod
-	}
-
-	rss, err := c.kclient.ReplicaSets(HYPERPILOT_OPERATOR_NS).List(metav1.ListOptions{})
+	err = c.clusterState.PopulateReplicaSet(c.kclient)
 	if err != nil {
 		return errors.New("Unable to list ReplicaSet from kubernetes")
-	}
-	for _, r := range rss.Items {
-		rs := r
-		c.clusterState.ReplicaSets[rs.Name] = &rs
 	}
 
 	// 3. Initialize controllers

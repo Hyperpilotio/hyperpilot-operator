@@ -256,48 +256,6 @@ func (server *APIServer) getClusterNodes(c *gin.Context) {
 	c.JSON(http.StatusOK, nodeNameSet.ToList())
 }
 
-//func (server *APIServer) findReplicaSetHash(deploymentName string) (string, error) {
-//	for _, v := range server.ClusterState.ReplicaSets {
-//		hash := v.ObjectMeta.Labels["pod-template-hash"]
-//		for _, owner := range v.OwnerReferences {
-//			if owner.Kind == "Deployment" && owner.Name == deploymentName {
-//				return hash, nil
-//			}
-//		}
-//	}
-//	return "", errors.New("Can't find ReplicaSet Pod-template-hash for Deployment {" + deploymentName + "}")
-//}
-//
-//func (server *APIServer) findDeploymentPod(namespace, deploymentName, hash string) []*v1.Pod {
-//	r := []*v1.Pod{}
-//	for podName, pod := range server.ClusterState.Pods {
-//		if strings.HasPrefix(podName, deploymentName) && strings.Contains(podName, hash) && pod.Namespace == namespace {
-//			p := &pod
-//			r = append(r, *p)
-//		}
-//	}
-//	if len(r) == 0 {
-//		log.Printf("[ APIServer ] Can't find pod for Deployment {%s} in namespace {%s} ", deploymentName, namespace)
-//	}
-//	return r
-//}
-
-//func (server *APIServer) findStatefulSetPod(namespace, statefulSetName string) []*v1.Pod {
-//	r := []*v1.Pod{}
-//	for _, pod := range server.ClusterState.Pods {
-//		for _, own := range pod.OwnerReferences {
-//			if own.Kind == "StatefulSet" && own.Name == statefulSetName {
-//				p := &pod
-//				r = append(r, *p)
-//			}
-//		}
-//	}
-//	if len(r) == 0 {
-//		log.Printf("[ APIServer ] Can't find pod for StatefulSet {%s} in namespace {%s} ", statefulSetName, namespace)
-//	}
-//	return r
-//}
-
 func (server *APIServer) getClusterMapping(c *gin.Context) {
 	resp := []MappingResponse{}
 	req := []string{}
