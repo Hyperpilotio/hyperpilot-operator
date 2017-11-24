@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	HYPERPILOT_OPERATOR_NS = ""
+	HYPERPILOT_OPERATOR_NS = common.HYPERPILOT_OPERATOR_NS
 
 	// Operator states
 	OPERATOR_NOT_RUNNING              = -1
@@ -21,44 +21,44 @@ const (
 )
 
 type EventProcessor interface {
-	ProcessPod(podEvent *PodEvent)
-	ProcessNode(nodeEvent *NodeEvent)
-	ProcessDaemonSet(daemonSetEvent *DaemonSetEvent)
-	ProcessDeployment(deploymentEvent *DeploymentEvent)
-	ProcessReplicaSet(replicaSetEvent *ReplicaSetEvent)
+	ProcessPod(podEvent *common.PodEvent)
+	ProcessNode(nodeEvent *common.NodeEvent)
+	ProcessDaemonSet(daemonSetEvent *common.DaemonSetEvent)
+	ProcessDeployment(deploymentEvent *common.DeploymentEvent)
+	ProcessReplicaSet(replicaSetEvent *common.ReplicaSetEvent)
 }
 
 type EventReceiver struct {
-	eventsChan chan Event
+	eventsChan chan common.Event
 	processor  EventProcessor
 }
 
 func (receiver *EventReceiver) Run() {
 	go func() {
 		for e := range receiver.eventsChan {
-			_, ok := e.(*PodEvent)
+			_, ok := e.(*common.PodEvent)
 			if ok {
-				receiver.processor.ProcessPod(e.(*PodEvent))
+				receiver.processor.ProcessPod(e.(*common.PodEvent))
 			}
 
-			_, ok = e.(*NodeEvent)
+			_, ok = e.(*common.NodeEvent)
 			if ok {
-				receiver.processor.ProcessNode(e.(*NodeEvent))
+				receiver.processor.ProcessNode(e.(*common.NodeEvent))
 			}
 
-			_, ok = e.(*DaemonSetEvent)
+			_, ok = e.(*common.DaemonSetEvent)
 			if ok {
-				receiver.processor.ProcessDaemonSet(e.(*DaemonSetEvent))
+				receiver.processor.ProcessDaemonSet(e.(*common.DaemonSetEvent))
 			}
 
-			_, ok = e.(*DeploymentEvent)
+			_, ok = e.(*common.DeploymentEvent)
 			if ok {
-				receiver.processor.ProcessDeployment(e.(*DeploymentEvent))
+				receiver.processor.ProcessDeployment(e.(*common.DeploymentEvent))
 			}
 
-			_, ok = e.(*ReplicaSetEvent)
+			_, ok = e.(*common.ReplicaSetEvent)
 			if ok {
-				receiver.processor.ProcessReplicaSet(e.(*ReplicaSetEvent))
+				receiver.processor.ProcessReplicaSet(e.(*common.ReplicaSetEvent))
 			}
 
 			// Log unknown event
@@ -66,7 +66,7 @@ func (receiver *EventReceiver) Run() {
 	}()
 }
 
-func (receiver *EventReceiver) Receive(e Event) {
+func (receiver *EventReceiver) Receive(e common.Event) {
 	receiver.eventsChan <- e
 }
 
@@ -128,54 +128,24 @@ func NewHyperpilotOperator(kclient *kubernetes.Clientset, controllers []EventPro
 	return hpc, nil
 }
 
-func (c *HyperpilotOperator) ProcessDaemonSet(e *DaemonSetEvent) {}
+func (c *HyperpilotOperator) ProcessDaemonSet(e *common.DaemonSetEvent) {}
 
-func (c *HyperpilotOperator) ProcessDeployment(e *DeploymentEvent) {}
+func (c *HyperpilotOperator) ProcessDeployment(e *common.DeploymentEvent) {}
 
-func (c *HyperpilotOperator) ProcessNode(e *NodeEvent) {}
+func (c *HyperpilotOperator) ProcessNode(e *common.NodeEvent) {}
 
-func (c *HyperpilotOperator) ProcessPod(e *PodEvent) {
-	c.clusterState.Lock.Lock()
-	if e.EventType == DELETE {
-		delete(c.clusterState.Pods, e.Cur.Name)
-		log.Printf("[ operator ] Delete Pod {%s}", e.Cur.Name)
-	}
-
-	// node info is available until pod is in running state
-	if e.EventType == UPDATE {
-		if e.Old.Status.Phase == "Pending" && e.Cur.Status.Phase == "Running" {
-			c.clusterState.Pods[e.Cur.Name] = e.Cur
-
-			log.Printf("[ operator ] Insert NEW Pod {%s}", e.Cur.Name)
-		}
-	}
-	c.clusterState.Lock.Unlock()
-
+func (c *HyperpilotOperator) ProcessPod(e *common.PodEvent) {
+	c.clusterState.ProcessPod(e)
 	for _, podRegister := range c.podRegisters {
 		podRegister.Receive(e)
 	}
 }
 
-func (c *HyperpilotOperator) ProcessReplicaSet(e *ReplicaSetEvent) {
-	c.clusterState.Lock.Lock()
-	if e.EventType == ADD {
-		if _, ok := c.clusterState.ReplicaSets[e.Cur.Name]; !ok {
-			c.clusterState.ReplicaSets[e.Cur.Name] = e.Cur
-			log.Printf("[ operator ] Insert new ReplicaSet {%s}", e.Cur.Name)
-		}
-	}
-
-	if e.EventType == DELETE {
-		delete(c.clusterState.ReplicaSets, e.Cur.Name)
-		log.Printf("[ operator ] Delete ReplicaSet {%s},", e.Cur.Name)
-
-	}
-	c.clusterState.Lock.Unlock()
-
+func (c *HyperpilotOperator) ProcessReplicaSet(e *common.ReplicaSetEvent) {
+	c.clusterState.ProcessReplicaSet(e)
 	for _, rsRegister := range c.rsRegisters {
 		rsRegister.Receive(e)
 	}
-
 }
 
 // Run starts the process for listening for pod changes and acting upon those changes.
@@ -244,7 +214,7 @@ func (c *HyperpilotOperator) Run(stopCh <-chan struct{}) error {
 
 func (c *HyperpilotOperator) accept(processor EventProcessor, resourceEnum ResourceEnum) {
 	eventReceiver := &EventReceiver{
-		eventsChan: make(chan Event, 1000),
+		eventsChan: make(chan common.Event, 1000),
 		processor:  processor,
 	}
 	eventReceiver.Run()

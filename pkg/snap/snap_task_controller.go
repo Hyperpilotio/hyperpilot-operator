@@ -29,7 +29,7 @@ type SnapNode struct {
 	SnapTasks          map[string]string
 	runningPodsMx      *sync.Mutex
 	RunningServicePods map[string]ServicePodInfo
-	PodEvents          chan *operator.PodEvent
+	PodEvents          chan *common.PodEvent
 	ExitChan           chan bool
 	ServiceList        *[]string
 	config             *viper.Viper
@@ -123,7 +123,7 @@ func NewSnapNode(nodeName string, externalIp string, serviceList *[]string, conf
 		snapTaskMx:         &sync.Mutex{},
 		SnapTasks:          make(map[string]string),
 		TaskManager:        nil,
-		PodEvents:          make(chan *operator.PodEvent, 1000),
+		PodEvents:          make(chan *common.PodEvent, 1000),
 		ExitChan:           make(chan bool, 1),
 		ServiceList:        serviceList,
 		config:             config,
@@ -229,12 +229,12 @@ func (n *SnapNode) initSnap(isOutsideCluster bool, snapPod *v1.Pod, clusterState
 	return nil
 }
 
-func (s *SnapTaskController) ProcessPod(e *operator.PodEvent) {
+func (s *SnapTaskController) ProcessPod(e *common.PodEvent) {
 	s.snapNodeMx.Lock()
 	defer s.snapNodeMx.Unlock()
 
 	switch e.EventType {
-	case operator.DELETE:
+	case common.DELETE:
 		if e.Cur.Status.Phase != "Running" {
 			return
 		}
@@ -256,7 +256,7 @@ func (s *SnapTaskController) ProcessPod(e *operator.PodEvent) {
 		if node.isServicePod(e.Cur) {
 			node.PodEvents <- e
 		}
-	case operator.ADD, operator.UPDATE:
+	case common.ADD, common.UPDATE:
 		if e.Cur.Status.Phase == "Running" && (e.Old == nil || e.Old.Status.Phase == "Pending") {
 			nodeName := e.Cur.Spec.NodeName
 			node, ok := s.Nodes[nodeName]
@@ -291,7 +291,7 @@ func (n *SnapNode) Run(isOutsideCluster bool) {
 				return
 			case e := <-n.PodEvents:
 				switch e.EventType {
-				case operator.ADD, operator.UPDATE:
+				case common.ADD, common.UPDATE:
 					container := e.Cur.Spec.Containers[0]
 					n.runningPodsMx.Lock()
 					n.RunningServicePods[e.Cur.Name] = ServicePodInfo{
@@ -305,7 +305,7 @@ func (n *SnapNode) Run(isOutsideCluster bool) {
 					}
 					log.Printf("[ SnapNode ] Insert Service Pod {%s}", e.Cur.Name)
 
-				case operator.DELETE:
+				case common.DELETE:
 					if _, ok := n.RunningServicePods[e.Cur.Name]; ok {
 						n.runningPodsMx.Lock()
 						delete(n.RunningServicePods, e.Cur.Name)
@@ -529,10 +529,10 @@ func (s *SnapTaskController) isSnapNodeReady() bool {
 	return true
 }
 
-func (s *SnapTaskController) ProcessDeployment(e *operator.DeploymentEvent) {}
+func (s *SnapTaskController) ProcessDeployment(e *common.DeploymentEvent) {}
 
-func (s *SnapTaskController) ProcessDaemonSet(e *operator.DaemonSetEvent) {}
+func (s *SnapTaskController) ProcessDaemonSet(e *common.DaemonSetEvent) {}
 
-func (s *SnapTaskController) ProcessNode(e *operator.NodeEvent) {}
+func (s *SnapTaskController) ProcessNode(e *common.NodeEvent) {}
 
-func (s *SnapTaskController) ProcessReplicaSet(e *operator.ReplicaSetEvent) {}
+func (s *SnapTaskController) ProcessReplicaSet(e *common.ReplicaSetEvent) {}
