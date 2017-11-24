@@ -36,6 +36,43 @@ func NewClusterState() *ClusterState {
 	}
 }
 
+func (clusterState *ClusterState) ProcessReplicaSet(e *ReplicaSetEvent) {
+	clusterState.Lock.Lock()
+	defer clusterState.Lock.Unlock()
+
+	if e.EventType == ADD {
+		if _, ok := clusterState.ReplicaSets[e.Cur.Name]; !ok {
+			clusterState.ReplicaSets[e.Cur.Name] = e.Cur
+			log.Printf("[ ClusterState ] Insert new ReplicaSet {%s}", e.Cur.Name)
+		}
+	}
+
+	if e.EventType == DELETE {
+		delete(clusterState.ReplicaSets, e.Cur.Name)
+		log.Printf("[ ClusterState ] Delete ReplicaSet {%s},", e.Cur.Name)
+
+	}
+}
+
+func (clusterState *ClusterState) ProcessPod(e *PodEvent) {
+	clusterState.Lock.Lock()
+	defer clusterState.Lock.Unlock()
+
+	if e.EventType == DELETE {
+		delete(clusterState.Pods, e.Cur.Name)
+		log.Printf("[ ClusterState ] Delete Pod {%s}", e.Cur.Name)
+	}
+
+	// node info is available until pod is in running state
+	if e.EventType == UPDATE {
+		if e.Old.Status.Phase == "Pending" && e.Cur.Status.Phase == "Running" {
+			clusterState.Pods[e.Cur.Name] = e.Cur
+
+			log.Printf("[ ClusterState ] Insert NEW Pod {%s}", e.Cur.Name)
+		}
+	}
+}
+
 func (clusterState *ClusterState) PopulateNodeInfo(kclient *kubernetes.Clientset) error {
 	nodes, err := kclient.Nodes().List(metav1.ListOptions{})
 	if err != nil {
