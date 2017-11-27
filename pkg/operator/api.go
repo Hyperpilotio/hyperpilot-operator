@@ -1,11 +1,17 @@
 package operator
 
 import (
+	"bytes"
+	"errors"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hyperpilotio/hyperpilot-operator/pkg/common"
+	"github.com/prometheus/common/expfmt"
 	"github.com/spf13/viper"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -392,5 +398,80 @@ func (server *APIServer) listServices(namespaceName string) (*[]string, error) {
 }
 
 func (server *APIServer) getClusterAppMetrics(c *gin.Context) {
+	var req MetricRequest
+	err := c.BindJSON(&req)
+	if err != nil {
+		log.Printf("[ APIServer ] Failed to parse spec request request: " + err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": true,
+			"cause": "Failed to parse spec request request: " + err.Error(),
+		})
+		return
+	}
 
+	hash, err := server.ClusterState.FindReplicaSetHash(req.Name)
+	if err != nil {
+		log.Printf("[ APIServer ] pod-template-hash is not found for deployment {%s}", req.Name)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": true,
+			"cause": "Failed to find pod-template-hash: " + err.Error(),
+		})
+		return
+	}
+
+	podList := server.ClusterState.FindDeploymentPod(req.Namespace, req.Name, hash)
+	if len(podList) == 0 {
+		log.Printf("[ APIServer ] Can't find deployment Pod: " + err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": true,
+			"cause": "Can't find deployment Pod: " + err.Error(),
+		})
+		return
+	}
+
+	var metricResp MetricResponse
+	for _, pod := range podList {
+		url := "http://" + pod.Name + "." + req.Namespace + ":" + strconv.Itoa(int(req.Prometheus.MetricPort))
+		metricResp, err = getPrometheusMetrics(url)
+		if err != nil {
+			log.Printf("[ APIServer ] Failed to get to Prometheus Metrics: " + err.Error())
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": true,
+				"cause": "Failed to get to Prometheus Metrics: " + err.Error(),
+			})
+			return
+		}
+		break
+	}
+	c.JSON(http.StatusOK, metricResp)
+}
+
+func getPrometheusMetrics(url string) (MetricResponse, error) {
+	var parser expfmt.TextParser
+	var metricNames []string
+	var ioReader io.Reader
+
+	resp, err := http.Get(url)
+	if err != nil {
+		log.Printf("Conect to %s failed :%s", url, err.Error())
+		return MetricResponse{}, err
+	} else if resp.StatusCode == http.StatusOK {
+		defer resp.Body.Close()
+		buf := new(bytes.Buffer)
+		buf.ReadFrom(resp.Body)
+		b := buf.Bytes()
+		ioReader = bytes.NewReader(b)
+	} else {
+		return MetricResponse{}, errors.New(fmt.Sprintf("Status code: %d Response: %v\n", resp.StatusCode, resp))
+	}
+
+	metricFamilies, err := parser.TextToMetricFamilies(ioReader)
+	if err != nil {
+		log.Printf("Parse metrics from IO reader failed: %s", err.Error())
+		return MetricResponse{}, err
+	}
+	for name := range metricFamilies {
+		metricNames = append(metricNames, name)
+	}
+	return MetricResponse{&metricNames}, nil
 }
