@@ -39,6 +39,7 @@
           {
             "name": "deployment1",
             "k8s_spec": {
+              "kind": "Deployment",
               "metadata": {},
               "spec": {},
               "status": {}
@@ -47,6 +48,7 @@
           {
             "name": "deployment2",
             "k8s_spec": {
+              "kind": "Deployment",
               "metadata": {},
               "spec": {},
               "status": {}
@@ -57,6 +59,7 @@
           {
             "name": "service1",
             "k8s_spec": {
+              "kind": "Service",
               "metadata": {},
               "spec": {},
               "status": {}

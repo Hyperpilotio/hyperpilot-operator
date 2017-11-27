@@ -1,28 +1,30 @@
 package operator
 
 import (
+	"sync"
+	"time"
+
+	"github.com/hyperpilotio/hyperpilot-operator/pkg/common"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
 	"k8s.io/client-go/tools/cache"
-	"sync"
-	"time"
 )
 
 type DeploymentInformer struct {
 	indexInformer cache.SharedIndexInformer
 	processor     EventProcessor
 	mutex         sync.Mutex
-	queuedEvents  []*DeploymentEvent
+	queuedEvents  []*common.DeploymentEvent
 	initializing  bool
 }
 
 func InitDeploymentInformer(kclient *kubernetes.Clientset, processor EventProcessor) *DeploymentInformer {
 	di := &DeploymentInformer{
 		processor:    processor,
-		queuedEvents: []*DeploymentEvent{},
+		queuedEvents: []*common.DeploymentEvent{},
 		initializing: true,
 	}
 
@@ -70,7 +72,7 @@ func (d *DeploymentInformer) onOperatorReady() {
 	d.initializing = false
 }
 
-func (d *DeploymentInformer) handleEvent(e *DeploymentEvent) {
+func (d *DeploymentInformer) handleEvent(e *common.DeploymentEvent) {
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
 	if d.initializing {
@@ -84,9 +86,9 @@ func (d *DeploymentInformer) handleEvent(e *DeploymentEvent) {
 func (d *DeploymentInformer) onAdd(i interface{}) {
 	deployObj := i.(*v1beta1.Deployment)
 
-	e := &DeploymentEvent{
-		ResourceEvent: ResourceEvent{
-			EventType: ADD,
+	e := &common.DeploymentEvent{
+		ResourceEvent: common.ResourceEvent{
+			EventType: common.ADD,
 		},
 		Cur: deployObj,
 		Old: nil,
@@ -99,9 +101,9 @@ func (d *DeploymentInformer) onUpdate(i1 interface{}, i2 interface{}) {
 	old := i1.(*v1beta1.Deployment)
 	cur := i2.(*v1beta1.Deployment)
 
-	e := &DeploymentEvent{
-		ResourceEvent: ResourceEvent{
-			EventType: UPDATE,
+	e := &common.DeploymentEvent{
+		ResourceEvent: common.ResourceEvent{
+			EventType: common.UPDATE,
 		},
 		Cur: cur,
 		Old: old,
@@ -113,9 +115,9 @@ func (d *DeploymentInformer) onUpdate(i1 interface{}, i2 interface{}) {
 func (d *DeploymentInformer) onDelete(cur interface{}) {
 	deployObj := cur.(*v1beta1.Deployment)
 
-	e := &DeploymentEvent{
-		ResourceEvent: ResourceEvent{
-			EventType: DELETE,
+	e := &common.DeploymentEvent{
+		ResourceEvent: common.ResourceEvent{
+			EventType: common.DELETE,
 		},
 		Cur: deployObj,
 		Old: nil,

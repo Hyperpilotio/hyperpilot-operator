@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hyperpilotio/hyperpilot-operator/pkg/common"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
@@ -16,14 +17,14 @@ type ReplicaSetInformer struct {
 	indexInformer cache.SharedIndexInformer
 	processor     EventProcessor
 	mutex         sync.Mutex
-	queuedEvents  []*ReplicaSetEvent
+	queuedEvents  []*common.ReplicaSetEvent
 	initializing  bool
 }
 
 func InitReplicaSetInformer(kclient *kubernetes.Clientset, processor EventProcessor) *ReplicaSetInformer {
 	r := &ReplicaSetInformer{
 		processor:    processor,
-		queuedEvents: []*ReplicaSetEvent{},
+		queuedEvents: []*common.ReplicaSetEvent{},
 		initializing: true,
 	}
 
@@ -72,7 +73,7 @@ func (r *ReplicaSetInformer) onOperatorReady() {
 	r.initializing = false
 }
 
-func (r *ReplicaSetInformer) handleEvent(e *ReplicaSetEvent) {
+func (r *ReplicaSetInformer) handleEvent(e *common.ReplicaSetEvent) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 	if r.initializing {
@@ -86,9 +87,9 @@ func (r *ReplicaSetInformer) handleEvent(e *ReplicaSetEvent) {
 func (r *ReplicaSetInformer) onAdd(cur1 interface{}) {
 	podObj := cur1.(*v1beta1.ReplicaSet)
 
-	e := &ReplicaSetEvent{
-		ResourceEvent: ResourceEvent{
-			EventType: ADD,
+	e := &common.ReplicaSetEvent{
+		ResourceEvent: common.ResourceEvent{
+			EventType: common.ADD,
 		},
 		Cur: podObj,
 		Old: nil,
@@ -100,9 +101,9 @@ func (r *ReplicaSetInformer) onAdd(cur1 interface{}) {
 func (r *ReplicaSetInformer) onDelete(cur interface{}) {
 	podObj := cur.(*v1beta1.ReplicaSet)
 
-	e := &ReplicaSetEvent{
-		ResourceEvent: ResourceEvent{
-			EventType: DELETE,
+	e := &common.ReplicaSetEvent{
+		ResourceEvent: common.ResourceEvent{
+			EventType: common.DELETE,
 		},
 		Cur: podObj,
 		Old: nil,
@@ -115,9 +116,9 @@ func (r *ReplicaSetInformer) onUpdate(old, cur interface{}) {
 	oldObj := old.(*v1beta1.ReplicaSet)
 	curObj := cur.(*v1beta1.ReplicaSet)
 
-	e := &ReplicaSetEvent{
-		ResourceEvent: ResourceEvent{
-			EventType: UPDATE,
+	e := &common.ReplicaSetEvent{
+		ResourceEvent: common.ResourceEvent{
+			EventType: common.UPDATE,
 		},
 		Old: oldObj,
 		Cur: curObj,
