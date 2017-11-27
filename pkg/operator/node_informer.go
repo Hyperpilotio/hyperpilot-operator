@@ -1,28 +1,30 @@
 package operator
 
 import (
+	"sync"
+	"time"
+
+	"github.com/hyperpilotio/hyperpilot-operator/pkg/common"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/api/v1"
 	"k8s.io/client-go/tools/cache"
-	"sync"
-	"time"
 )
 
 type NodeInformer struct {
 	indexInformer cache.SharedIndexInformer
 	processor     EventProcessor
 	mutex         sync.Mutex
-	queuedEvents  []*NodeEvent
+	queuedEvents  []*common.NodeEvent
 	initializing  bool
 }
 
 func InitNodeInformer(kclient *kubernetes.Clientset, processor EventProcessor) *NodeInformer {
 	ni := &NodeInformer{
 		processor:    processor,
-		queuedEvents: []*NodeEvent{},
+		queuedEvents: []*common.NodeEvent{},
 		initializing: true,
 	}
 
@@ -71,7 +73,7 @@ func (ni *NodeInformer) onOperatorReady() {
 	ni.initializing = false
 }
 
-func (ni *NodeInformer) handleEvent(e *NodeEvent) {
+func (ni *NodeInformer) handleEvent(e *common.NodeEvent) {
 	ni.mutex.Lock()
 	defer ni.mutex.Unlock()
 	if ni.initializing {
@@ -85,9 +87,9 @@ func (ni *NodeInformer) handleEvent(e *NodeEvent) {
 func (ni *NodeInformer) onAdd(cur interface{}) {
 	nodeObj := cur.(*v1.Node)
 
-	e := &NodeEvent{
-		ResourceEvent: ResourceEvent{
-			EventType: ADD,
+	e := &common.NodeEvent{
+		ResourceEvent: common.ResourceEvent{
+			EventType: common.ADD,
 		},
 		Cur: nodeObj,
 		Old: nil,
@@ -99,9 +101,9 @@ func (ni *NodeInformer) onAdd(cur interface{}) {
 func (ni *NodeInformer) onDelete(cur interface{}) {
 	nodeObj := cur.(*v1.Node)
 
-	e := &NodeEvent{
-		ResourceEvent: ResourceEvent{
-			EventType: DELETE,
+	e := &common.NodeEvent{
+		ResourceEvent: common.ResourceEvent{
+			EventType: common.DELETE,
 		},
 		Cur: nodeObj,
 		Old: nil,
@@ -114,9 +116,9 @@ func (ni *NodeInformer) onUpdate(old, cur interface{}) {
 	oldObj := old.(*v1.Node)
 	curObj := cur.(*v1.Node)
 
-	e := &NodeEvent{
-		ResourceEvent: ResourceEvent{
-			EventType: UPDATE,
+	e := &common.NodeEvent{
+		ResourceEvent: common.ResourceEvent{
+			EventType: common.UPDATE,
 		},
 		Old: oldObj,
 		Cur: curObj,

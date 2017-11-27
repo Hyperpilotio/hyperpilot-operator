@@ -1,4 +1,4 @@
-package operator
+package common
 
 type StringSet struct {
 	set map[string]bool
@@ -14,7 +14,7 @@ func (set *StringSet) Add(s string) bool {
 	return !found
 }
 
-func (set *StringSet) Get(s string) bool {
+func (set *StringSet) IsExist(s string) bool {
 	_, found := set.set[s]
 	return found
 }
@@ -29,4 +29,16 @@ func (set *StringSet) ToList() []string {
 		r = append(r, k)
 	}
 	return r
+}
+
+func (set1 *StringSet) IsIdentical(set2 *StringSet) bool {
+	if len(set1.set) != len(set2.set) {
+		return false
+	}
+	for k := range set2.set {
+		if !set1.IsExist(k) {
+			return false
+		}
+	}
+	return true
 }
