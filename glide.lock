@@ -1,5 +1,5 @@
 hash: dd50c84baed9fd31b54c3c6b21d8a05b08b8f3ff7b46b521c69bfd265c48daf2
-updated: 2017-11-17T15:11:59.745916964-08:00
+updated: 2017-11-17T23:21:36.103090503-08:00
 imports:
 - name: github.com/armon/go-metrics
   version: 06b60999766278efd6d2b5d8418a58c3d5b99e87
@@ -116,7 +116,7 @@ imports:
 - name: github.com/pelletier/go-toml
   version: c9506ee96398e7571356462217b9e24d6a628d71
 - name: github.com/pkg/errors
-  version: f15c970de5b76fac0b59abb32d62c17cc7bed265
+  version: 645ef00459ed84a119197bfb8d8205042c6df63d
 - name: github.com/PuerkitoBio/purell
   version: 8a290539e2e8629dbc4e6bad948158f790ec31f4
 - name: github.com/PuerkitoBio/urlesc
