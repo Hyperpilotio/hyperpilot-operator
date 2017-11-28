@@ -13,5 +13,5 @@
 
 ## Usage
 1. `export KUBECONFIG=/<PATH>/<TO>/kubeconfig`
-2. `./bin/hyperpilot-operator [ --run-outside-cluster ] [ --conf=<PATH>/<TO>/<CONFIGURE> ]`
+2. `./bin/hyperpilot-operator [ --conf=<PATH>/<TO>/<CONFIGURE> ]`
 

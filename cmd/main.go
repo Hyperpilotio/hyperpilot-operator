@@ -23,7 +23,6 @@ func main() {
 	stop := make(chan struct{})     // Create channel to receive stop signal
 
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM, syscall.SIGINT) // Register the sigs channel to receieve SIGTERM
-	//runOutsideCluster := flag.Bool("run-outside-cluster", false, "Set this flag when running outside of the cluster.")
 	configPath := flag.String("config", "", "The file path to a config file")
 
 	flag.Parse()

@@ -416,7 +416,7 @@ func (server *APIServer) getClusterAppMetrics(c *gin.Context) {
 		hash, err := server.ClusterState.FindReplicaSetHash(req.Name)
 		if err != nil {
 			log.Printf("[ APIServer ] pod-template-hash is not found for deployment {%s}", req.Name)
-			c.JSON(http.StatusBadRequest, gin.H{
+			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": true,
 				"cause": "Failed to find pod-template-hash: " + err.Error(),
 			})
@@ -431,14 +431,13 @@ func (server *APIServer) getClusterAppMetrics(c *gin.Context) {
 
 	if len(podList) == 0 {
 		log.Printf("[ APIServer ] Can't find Pod for %s {%s}: %s", req.K8sType, req.Name, err.Error())
-		c.JSON(http.StatusBadRequest, gin.H{
+		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": true,
-			"cause": "Can't find Pod: " + err.Error(),
-		})
+			//"cause": "Can't find Pod: " + err.Error(),
+			"cause": fmt.Sprintf("Failed to get Pod for %s {%s}: %s \n", req.K8sType, req.Name, err.Error())})
 		return
 	}
 
-	var metricResp MetricResponse
 	for _, pod := range podList {
 		var url string
 		if server.isOutsideCluster() {
@@ -447,18 +446,18 @@ func (server *APIServer) getClusterAppMetrics(c *gin.Context) {
 		} else {
 			url = "http://" + pod.Name + "." + req.Namespace + ":" + strconv.Itoa(int(req.Prometheus.MetricPort)) + "/metrics"
 		}
-		metricResp, err = getPrometheusMetrics(url)
+		metricResp, err := getPrometheusMetrics(url)
 		if err != nil {
-			log.Printf("[ APIServer ] Failed to get to Prometheus Metrics: " + err.Error())
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": true,
-				"cause": "Failed to get to Prometheus Metrics: " + err.Error(),
-			})
-			return
+			log.Printf("[ APIServer ] Failed to get Prometheus Metrics from url %s of Pod {%s}, try another Pod : %s ", url, pod.Name, err.Error())
+			continue
 		}
-		break
+		c.JSON(http.StatusOK, metricResp)
+		return
 	}
-	c.JSON(http.StatusOK, metricResp)
+
+	c.JSON(http.StatusInternalServerError, gin.H{
+		"error": true,
+		"cause": fmt.Sprintf("Failed to get Prometheus Metrics from all Pods of %s {%s} \n", req.K8sType, req.Name)})
 }
 
 func (server *APIServer) isOutsideCluster() bool {
@@ -472,7 +471,7 @@ func getPrometheusMetrics(url string) (MetricResponse, error) {
 
 	resp, err := http.Get(url)
 	if err != nil {
-		log.Printf("Conect to %s failed :%s", url, err.Error())
+		log.Printf("Connect to %s failed :%s", url, err.Error())
 		return MetricResponse{}, err
 	} else if resp.StatusCode == http.StatusOK {
 		defer resp.Body.Close()
@@ -481,7 +480,7 @@ func getPrometheusMetrics(url string) (MetricResponse, error) {
 		b := buf.Bytes()
 		ioReader = bytes.NewReader(b)
 	} else {
-		return MetricResponse{}, errors.New(fmt.Sprintf("Status code: %d Response: %v\n", resp.StatusCode, resp))
+		return MetricResponse{}, errors.New(fmt.Sprintf("Unexpected HTTP Status: code: %d Response: %v\n", resp.StatusCode, resp))
 	}
 
 	metricFamilies, err := parser.TextToMetricFamilies(ioReader)
