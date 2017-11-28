@@ -36,7 +36,6 @@ type SnapNode struct {
 }
 
 type SnapTaskController struct {
-	//isOutsideCluster bool
 	ServiceList    []string
 	snapNodeMx     *sync.Mutex
 	Nodes          map[string]*SnapNode
@@ -47,10 +46,9 @@ type SnapTaskController struct {
 
 func NewSnapTaskController(config *viper.Viper) *SnapTaskController {
 	return &SnapTaskController{
-		ServiceList: config.GetStringSlice("SnapTaskController.ServiceList"),
-		snapNodeMx:  &sync.Mutex{},
-		Nodes:       make(map[string]*SnapNode),
-		//isOutsideCluster: runOutsideCluster,
+		ServiceList:    config.GetStringSlice("SnapTaskController.ServiceList"),
+		snapNodeMx:     &sync.Mutex{},
+		Nodes:          make(map[string]*SnapNode),
 		config:         config,
 		ApplicationSet: common.NewStringSet(),
 	}
