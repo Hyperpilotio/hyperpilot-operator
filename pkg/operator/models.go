@@ -43,7 +43,7 @@ type MappingResponse struct {
 }
 
 type Prometheus struct {
-	MetricPort int `json:"metrics"`
+	MetricPort int `json:"metricPort"`
 }
 
 type MetricRequest struct {

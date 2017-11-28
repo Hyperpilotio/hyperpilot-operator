@@ -409,29 +409,44 @@ func (server *APIServer) getClusterAppMetrics(c *gin.Context) {
 		return
 	}
 
-	hash, err := server.ClusterState.FindReplicaSetHash(req.Name)
-	if err != nil {
-		log.Printf("[ APIServer ] pod-template-hash is not found for deployment {%s}", req.Name)
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": true,
-			"cause": "Failed to find pod-template-hash: " + err.Error(),
-		})
-		return
+	var podList []*v1.Pod
+
+	switch req.K8sType {
+	case "deployment":
+		hash, err := server.ClusterState.FindReplicaSetHash(req.Name)
+		if err != nil {
+			log.Printf("[ APIServer ] pod-template-hash is not found for deployment {%s}", req.Name)
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": true,
+				"cause": "Failed to find pod-template-hash: " + err.Error(),
+			})
+			return
+		}
+
+		podList = server.ClusterState.FindDeploymentPod(req.Namespace, req.Name, hash)
+	case "statefulset":
+		podList = server.ClusterState.FindStatefulSetPod(req.Namespace, req.Name)
+
 	}
 
-	podList := server.ClusterState.FindDeploymentPod(req.Namespace, req.Name, hash)
 	if len(podList) == 0 {
-		log.Printf("[ APIServer ] Can't find deployment Pod: " + err.Error())
+		log.Printf("[ APIServer ] Can't find Pod for %s {%s}: %s", req.K8sType, req.Name, err.Error())
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": true,
-			"cause": "Can't find deployment Pod: " + err.Error(),
+			"cause": "Can't find Pod: " + err.Error(),
 		})
 		return
 	}
 
 	var metricResp MetricResponse
 	for _, pod := range podList {
-		url := "http://" + pod.Name + "." + req.Namespace + ":" + strconv.Itoa(int(req.Prometheus.MetricPort))
+		var url string
+		if server.isOutsideCluster() {
+			externalIP := server.ClusterState.FindPodRunningNodeInfo(pod.Name).ExternalIP
+			url = "http://" + externalIP + ":" + strconv.Itoa(int(req.Prometheus.MetricPort)) + "/metrics"
+		} else {
+			url = "http://" + pod.Name + "." + req.Namespace + ":" + strconv.Itoa(int(req.Prometheus.MetricPort)) + "/metrics"
+		}
 		metricResp, err = getPrometheusMetrics(url)
 		if err != nil {
 			log.Printf("[ APIServer ] Failed to get to Prometheus Metrics: " + err.Error())
@@ -444,6 +459,10 @@ func (server *APIServer) getClusterAppMetrics(c *gin.Context) {
 		break
 	}
 	c.JSON(http.StatusOK, metricResp)
+}
+
+func (server *APIServer) isOutsideCluster() bool {
+	return server.config.GetBool("Operator.OutsideCluster")
 }
 
 func getPrometheusMetrics(url string) (MetricResponse, error) {

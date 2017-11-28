@@ -36,23 +36,23 @@ type SnapNode struct {
 }
 
 type SnapTaskController struct {
-	isOutsideCluster bool
-	ServiceList      []string
-	snapNodeMx       *sync.Mutex
-	Nodes            map[string]*SnapNode
-	ClusterState     *common.ClusterState
-	config           *viper.Viper
-	ApplicationSet   *common.StringSet
+	//isOutsideCluster bool
+	ServiceList    []string
+	snapNodeMx     *sync.Mutex
+	Nodes          map[string]*SnapNode
+	ClusterState   *common.ClusterState
+	config         *viper.Viper
+	ApplicationSet *common.StringSet
 }
 
-func NewSnapTaskController(runOutsideCluster bool, config *viper.Viper) *SnapTaskController {
+func NewSnapTaskController(config *viper.Viper) *SnapTaskController {
 	return &SnapTaskController{
-		ServiceList:      config.GetStringSlice("SnapTaskController.ServiceList"),
-		snapNodeMx:       &sync.Mutex{},
-		Nodes:            make(map[string]*SnapNode),
-		isOutsideCluster: runOutsideCluster,
-		config:           config,
-		ApplicationSet:   common.NewStringSet(),
+		ServiceList: config.GetStringSlice("SnapTaskController.ServiceList"),
+		snapNodeMx:  &sync.Mutex{},
+		Nodes:       make(map[string]*SnapNode),
+		//isOutsideCluster: runOutsideCluster,
+		config:         config,
+		ApplicationSet: common.NewStringSet(),
 	}
 }
 
@@ -138,7 +138,7 @@ func (s *SnapTaskController) Init(clusterState *common.ClusterState) error {
 		for _, p := range clusterState.Pods {
 			if p.Spec.NodeName == n.NodeName && isSnapPod(p) {
 				snapNode := NewSnapNode(n.NodeName, n.ExternalIP, &s.ServiceList, s.config)
-				init, err := snapNode.init(s.isOutsideCluster, clusterState)
+				init, err := snapNode.init(s.isOutsideCluster(), clusterState)
 				if !init {
 					log.Printf("[ SnapTaskController ] Snap is not found in the cluster for node during init: %s", n.NodeName)
 					// We will assume a new snap will be running and we will be notified at ProcessPod
@@ -266,7 +266,7 @@ func (s *SnapTaskController) ProcessPod(e *common.PodEvent) {
 					log.Printf("[ SnapTaskController ] Create new SnapNode in {%s}.", newNode.NodeId)
 					s.Nodes[nodeName] = newNode
 					go func() {
-						if err := newNode.initSnap(s.isOutsideCluster, e.Cur, s.ClusterState); err != nil {
+						if err := newNode.initSnap(s.isOutsideCluster(), e.Cur, s.ClusterState); err != nil {
 							// todo: fix crash because current map write
 							//delete(s.Nodes, nodeName)
 							log.Printf("[ SnapTaskController ] Unable to init snap for node %s: %s", nodeName, err.Error())
@@ -527,6 +527,10 @@ func (s *SnapTaskController) isSnapNodeReady() bool {
 		}
 	}
 	return true
+}
+
+func (s *SnapTaskController) isOutsideCluster() bool {
+	return s.config.GetBool("Operator.OutsideCluster")
 }
 
 func (s *SnapTaskController) ProcessDeployment(e *common.DeploymentEvent) {}

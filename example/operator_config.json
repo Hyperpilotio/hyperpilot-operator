@@ -1,5 +1,7 @@
 {
-  "Operator": {},
+  "Operator": {
+    "OutsideCluster": true
+  },
   "APIServer": {
     "Port": "8080",
     "Debug": false

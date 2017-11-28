@@ -23,27 +23,26 @@ func main() {
 	stop := make(chan struct{})     // Create channel to receive stop signal
 
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM, syscall.SIGINT) // Register the sigs channel to receieve SIGTERM
-	runOutsideCluster := flag.Bool("run-outside-cluster", false, "Set this flag when running outside of the cluster.")
+	//runOutsideCluster := flag.Bool("run-outside-cluster", false, "Set this flag when running outside of the cluster.")
 	configPath := flag.String("config", "", "The file path to a config file")
 
 	flag.Parse()
-
-	// Create clientset for interacting with the kubernetes cluster
-	clientset, err := newClientSet(*runOutsideCluster)
-	if err != nil {
-		log.Fatalf("Unable to create clientset: %s", err.Error())
-	}
 
 	config, err := ReadConfig(*configPath)
 	if err != nil {
 		log.Fatalf("Unable to read configure file: %s", err.Error())
 
 	}
+	// Create clientset for interacting with the kubernetes cluster
+	clientset, err := newClientSet(config.GetBool("Operator.OutsideCluster"))
+	if err != nil {
+		log.Fatalf("Unable to create clientset: %s", err.Error())
+	}
 
 	log.Printf("Starting operator...")
 
 	controllers := []operator.EventProcessor{}
-	controllers = append(controllers, hsnap.NewSnapTaskController(*runOutsideCluster, config))
+	controllers = append(controllers, hsnap.NewSnapTaskController(config))
 	hpc, err := operator.NewHyperpilotOperator(clientset, controllers, config)
 	if err != nil {
 		log.Printf("Unable to create hyperpilot operator: " + err.Error())
@@ -101,6 +100,7 @@ func ReadConfig(fileConfig string) (*viper.Viper, error) {
 	}
 
 	viper.SetDefault("SnapTaskController.CreateTaskRetry", 5)
+	viper.SetDefault("Operator.OutsideCluster", true)
 
 	err := viper.ReadInConfig()
 	if err != nil {
