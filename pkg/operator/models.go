@@ -41,3 +41,18 @@ type MappingResponse struct {
 	Services     *[]string `json:"services,omitempty"`
 	Statefulsets *[]string `json:"statefulsets,omitempty"`
 }
+
+type Prometheus struct {
+	MetricPort int `json:"metricPort"`
+}
+
+type MetricRequest struct {
+	K8sType    string     `json:"k8sType"`
+	Name       string     `json:"name"`
+	Namespace  string     `json:"namespace"`
+	Prometheus Prometheus `json:"prometheus"`
+}
+
+type MetricResponse struct {
+	Metric *[]string `json:"metrics"`
+}

@@ -1,11 +1,17 @@
 package operator
 
 import (
+	"bytes"
+	"errors"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hyperpilotio/hyperpilot-operator/pkg/common"
+	"github.com/prometheus/common/expfmt"
 	"github.com/spf13/viper"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -43,6 +49,7 @@ func (server *APIServer) Run() error {
 		clusterGroup.GET("/specs", server.getClusterSpecs)
 		clusterGroup.GET("/nodes", server.getClusterNodes)
 		clusterGroup.GET("/mapping", server.getClusterMapping)
+		clusterGroup.GET("/appmetrics", server.getClusterAppMetrics)
 	}
 	router.Group("/actuation")
 
@@ -388,4 +395,101 @@ func (server *APIServer) listServices(namespaceName string) (*[]string, error) {
 		serviceNames = append(serviceNames, service.Name)
 	}
 	return &serviceNames, nil
+}
+
+func (server *APIServer) getClusterAppMetrics(c *gin.Context) {
+	var req MetricRequest
+	err := c.BindJSON(&req)
+	if err != nil {
+		log.Printf("[ APIServer ] Failed to parse spec request request: " + err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": true,
+			"cause": "Failed to parse spec request request: " + err.Error(),
+		})
+		return
+	}
+
+	var podList []*v1.Pod
+
+	switch req.K8sType {
+	case "deployment":
+		hash, err := server.ClusterState.FindReplicaSetHash(req.Name)
+		if err != nil {
+			log.Printf("[ APIServer ] pod-template-hash is not found for deployment {%s}", req.Name)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": true,
+				"cause": "Failed to find pod-template-hash: " + err.Error(),
+			})
+			return
+		}
+
+		podList = server.ClusterState.FindDeploymentPod(req.Namespace, req.Name, hash)
+	case "statefulset":
+		podList = server.ClusterState.FindStatefulSetPod(req.Namespace, req.Name)
+
+	}
+
+	if len(podList) == 0 {
+		log.Printf("[ APIServer ] Can't find Pod for %s {%s}: %s", req.K8sType, req.Name, err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": true,
+			//"cause": "Can't find Pod: " + err.Error(),
+			"cause": fmt.Sprintf("Failed to get Pod for %s {%s}: %s \n", req.K8sType, req.Name, err.Error())})
+		return
+	}
+
+	for _, pod := range podList {
+		var url string
+		if server.isOutsideCluster() {
+			externalIP := server.ClusterState.FindPodRunningNodeInfo(pod.Name).ExternalIP
+			url = "http://" + externalIP + ":" + strconv.Itoa(int(req.Prometheus.MetricPort)) + "/metrics"
+		} else {
+			url = "http://" + pod.Name + "." + req.Namespace + ":" + strconv.Itoa(int(req.Prometheus.MetricPort)) + "/metrics"
+		}
+		metricResp, err := getPrometheusMetrics(url)
+		if err != nil {
+			log.Printf("[ APIServer ] Failed to get Prometheus Metrics from url %s of Pod {%s}, try another Pod : %s ", url, pod.Name, err.Error())
+			continue
+		}
+		c.JSON(http.StatusOK, metricResp)
+		return
+	}
+
+	c.JSON(http.StatusInternalServerError, gin.H{
+		"error": true,
+		"cause": fmt.Sprintf("Failed to get Prometheus Metrics from all Pods of %s {%s} \n", req.K8sType, req.Name)})
+}
+
+func (server *APIServer) isOutsideCluster() bool {
+	return server.config.GetBool("Operator.OutsideCluster")
+}
+
+func getPrometheusMetrics(url string) (MetricResponse, error) {
+	var parser expfmt.TextParser
+	var metricNames []string
+	var ioReader io.Reader
+
+	resp, err := http.Get(url)
+	if err != nil {
+		log.Printf("Connect to %s failed :%s", url, err.Error())
+		return MetricResponse{}, err
+	} else if resp.StatusCode == http.StatusOK {
+		defer resp.Body.Close()
+		buf := new(bytes.Buffer)
+		buf.ReadFrom(resp.Body)
+		b := buf.Bytes()
+		ioReader = bytes.NewReader(b)
+	} else {
+		return MetricResponse{}, errors.New(fmt.Sprintf("Unexpected HTTP Status: code: %d Response: %v\n", resp.StatusCode, resp))
+	}
+
+	metricFamilies, err := parser.TextToMetricFamilies(ioReader)
+	if err != nil {
+		log.Printf("Parse metrics from IO reader failed: %s", err.Error())
+		return MetricResponse{}, err
+	}
+	for name := range metricFamilies {
+		metricNames = append(metricNames, name)
+	}
+	return MetricResponse{&metricNames}, nil
 }

@@ -176,3 +176,11 @@ func (clusterState *ClusterState) FindStatefulSetPod(namespace, statefulSetName 
 	}
 	return r
 }
+
+func (clusterState *ClusterState) FindPodRunningNodeInfo(podName string) NodeInfo {
+	clusterState.Lock.RLock()
+	defer clusterState.Lock.RUnlock()
+
+	pod := clusterState.Pods[podName]
+	return clusterState.Nodes[pod.Spec.NodeName]
+}

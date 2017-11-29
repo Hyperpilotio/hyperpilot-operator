@@ -1,5 +1,5 @@
 hash: dd50c84baed9fd31b54c3c6b21d8a05b08b8f3ff7b46b521c69bfd265c48daf2
-updated: 2017-11-17T23:21:36.103090503-08:00
+updated: 2017-11-28T15:46:56.76503784-08:00
 imports:
 - name: github.com/armon/go-metrics
   version: 06b60999766278efd6d2b5d8418a58c3d5b99e87
@@ -109,14 +109,26 @@ imports:
   - jwriter
 - name: github.com/mattn/go-isatty
   version: 0360b2af4f38e8d38c7fce2a9f4e702702d73a39
+- name: github.com/matttproud/golang_protobuf_extensions
+  version: d0c3fe89de86839aecf2e0579c40ba3bb336a453
+  subpackages:
+  - pbutil
 - name: github.com/mitchellh/mapstructure
   version: db1efb556f84b25a0a13a04aad883943538ad2e0
 - name: github.com/pelletier/go-buffruneio
   version: df1e16fde7fc330a0ca68167c23bf7ed6ac31d6d
 - name: github.com/pelletier/go-toml
   version: c9506ee96398e7571356462217b9e24d6a628d71
-- name: github.com/pkg/errors
-  version: 645ef00459ed84a119197bfb8d8205042c6df63d
+- name: github.com/prometheus/client_model
+  version: fa8ad6fec33561be4280a8f0514318c79d7f6cb6
+  subpackages:
+  - go
+- name: github.com/prometheus/common
+  version: e8eabff8812b05acf522b45fdcd725a785188e37
+  subpackages:
+  - expfmt
+  - internal/bitbucket.org/ww/goautoneg
+  - model
 - name: github.com/PuerkitoBio/purell
   version: 8a290539e2e8629dbc4e6bad948158f790ec31f4
 - name: github.com/PuerkitoBio/urlesc
@@ -178,6 +190,8 @@ imports:
   version: c193cecd124b5cc722d7ee5538e945bdb3348435
 - name: gopkg.in/inf.v0
   version: 3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4
+- name: gopkg.in/resty.v1
+  version: 9ac9c42358f7c3c69ac9f8610e8790d7c338e85d
 - name: gopkg.in/yaml.v2
   version: c1cd2254a6dd314c9d73c338c12688c9325d85c6
 - name: k8s.io/apimachinery
@@ -305,6 +319,4 @@ imports:
   - util/flowcontrol
   - util/homedir
   - util/integer
-testImports:
-- name: gopkg.in/resty.v1
-  version: 9ac9c42358f7c3c69ac9f8610e8790d7c338e85d
+testImports: []
