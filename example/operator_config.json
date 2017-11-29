@@ -1,10 +1,10 @@
 {
   "Operator": {
-    "OutsideCluster": true
+    "OutsideCluster": false
   },
   "APIServer": {
     "Port": "8080",
-    "Debug": false
+    "Debug": true
   },
   "SnapTaskController": {
     "PluginsList": [

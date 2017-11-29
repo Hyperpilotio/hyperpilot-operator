@@ -98,12 +98,27 @@ func ReadConfig(fileConfig string) (*viper.Viper, error) {
 		viper.SetConfigFile(fileConfig)
 	}
 
+	//Default
 	viper.SetDefault("SnapTaskController.CreateTaskRetry", 5)
-	viper.SetDefault("Operator.OutsideCluster", true)
+	viper.SetDefault("Operator.OutsideCluster", false)
+	viper.SetDefault("SnapTaskController.Analyzer.Enable", true)
 
+	// overwrite by file
 	err := viper.ReadInConfig()
 	if err != nil {
 		return nil, err
+	}
+
+	// overwrite by ENV
+	if os.Getenv("HP_OUTSIDECLUSTER") == "true" {
+		viper.Set("Operator.OutsideCluster", true)
+	} else if os.Getenv("HP_OUTSIDECLUSTER") == "false" {
+		viper.Set("Operator.OutsideCluster", false)
+	}
+	if os.Getenv("HP_POLLANALYZERENABLE") == "false" {
+		viper.Set("SnapTaskController.Analyzer.Enable", false)
+	} else if os.Getenv("HP_POLLANALYZERENABLE") == "true" {
+		viper.Set("SnapTaskController.Analyzer.Enable", true)
 	}
 	return viper, nil
 }

@@ -15,3 +15,7 @@
 1. `export KUBECONFIG=/<PATH>/<TO>/kubeconfig`
 2. `./bin/hyperpilot-operator [ --conf=<PATH>/<TO>/<CONFIGURE> ]`
 
+## ENV
+* HP_OUTSIDECLUSTER
+* HP_POLLANALYZERENABLE
+
