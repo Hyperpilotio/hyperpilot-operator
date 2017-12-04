@@ -96,7 +96,11 @@ func (s *NodeSpecController) getNodeSpec(nodeName string) {
 		return
 	}
 
-	parseResult := parseCurlResult(string(curlResult[:]), nodeName)
+	parseResult, err := parseCurlResult(string(curlResult[:]), nodeName)
+	if err != nil {
+		log.Printf("[ NodeSpecController ] Parse Curl result {%s} fails : %s", string(curlResult[:]), err.Error())
+		return
+	}
 	err = s.writeToMongo(parseResult)
 	if err != nil {
 		log.Print("[ NodeSpecController ] Write Machine Type to MongoDB fail" + err.Error())
@@ -190,7 +194,7 @@ func (s *NodeSpecController) writeToMongo(data []byte) error {
 	return nil
 }
 
-func parseCurlResult(curlResult, nodeName string) []byte {
+func parseCurlResult(curlResult, nodeName string) ([]byte, error) {
 	s1 := strings.Split(curlResult, "/")
 	machineType := s1[len(s1)-1]
 
@@ -199,12 +203,12 @@ func parseCurlResult(curlResult, nodeName string) []byte {
 		cpu, err := strconv.Atoi(resource[1])
 		if err != nil {
 			log.Printf(err.Error())
-			return nil
+			return nil, err
 		}
 		memory, _ := strconv.Atoi(resource[2])
 		if err != nil {
 			log.Printf(err.Error())
-			return nil
+			return nil, err
 		}
 
 		customizedType := CustomizedMachineType{
@@ -218,9 +222,9 @@ func parseCurlResult(curlResult, nodeName string) []byte {
 		b, err := json.Marshal(customizedType)
 		if err != nil {
 			log.Printf(err.Error())
-			return nil
+			return nil, err
 		}
-		return b
+		return b, nil
 	} else {
 		// todo: Better check?
 		predefinedType := PredefinedMachineType{
@@ -231,12 +235,10 @@ func parseCurlResult(curlResult, nodeName string) []byte {
 		b, err := json.Marshal(predefinedType)
 		if err != nil {
 			log.Printf(err.Error())
-			return nil
+			return nil, err
 		}
-		return b
+		return b, nil
 	}
-
-	return nil
 }
 
 func (s *NodeSpecController) ProcessPod(e *common.PodEvent) {}

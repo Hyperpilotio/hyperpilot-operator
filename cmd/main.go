@@ -12,6 +12,7 @@ import (
 	"github.com/hyperpilotio/hyperpilot-operator/pkg/operator"
 	hsnap "github.com/hyperpilotio/hyperpilot-operator/pkg/snap"
 	"github.com/spf13/viper"
+	"strings"
 )
 
 func main() {
@@ -103,8 +104,13 @@ func ReadConfig(fileConfig string) (*viper.Viper, error) {
 
 func loadControllers(config *viper.Viper) []operator.EventProcessor {
 	controllers := []operator.EventProcessor{}
+	controllerSet := common.NewStringSet()
 
-	controllerSet := common.StringSetFromList(config.GetStringSlice("Operator.LoadedControllers"))
+	if ctls := os.Getenv("HP_CONTROLLERS"); ctls != "" {
+		controllerSet = common.StringSetFromList(strings.Split(ctls, ","))
+	} else {
+		controllerSet = common.StringSetFromList(config.GetStringSlice("Operator.LoadedControllers"))
+	}
 
 	if controllerSet.IsExist("SnapTaskController") {
 		controllers = append(controllers, hsnap.NewSnapTaskController(config))

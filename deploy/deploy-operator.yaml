@@ -20,6 +20,8 @@ spec:
         env:
           - name: HP_POLLANALYZERENABLE
             value: "false"
+          - name: HP_CONTROLLERS
+            value: "SnapTaskController"
         ports:
           - containerPort: 8080
             hostPort: 8080
