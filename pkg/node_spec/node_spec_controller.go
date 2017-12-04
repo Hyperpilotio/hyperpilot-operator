@@ -41,6 +41,7 @@ func (s *NodeSpecController) Init(clusterState *common.ClusterState) error {
 		return err
 	}
 	s.kclient = kclient
+	log.Print("[ NodeSpecController ] Init() finished.")
 	return nil
 }
 

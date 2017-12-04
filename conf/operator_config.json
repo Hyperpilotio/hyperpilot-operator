@@ -1,9 +1,9 @@
 {
   "Operator": {
-    "OutsideCluster": true,
+    "OutsideCluster": false,
     "LoadedControllers": [
-      "SnapTaskController",
-      "NodeSpecController"
+      "NodeSpecController",
+      "SnapTaskController"
     ]
   },
   "APIServer": {

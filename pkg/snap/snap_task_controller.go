@@ -152,6 +152,7 @@ func (s *SnapTaskController) Init(clusterState *common.ClusterState) error {
 	}
 	s.ClusterState.Lock.RUnlock()
 
+	log.Print("[ SnapTaskController ] Init() Finished.")
 	if s.config.GetBool("SnapTaskController.Analyzer.Enable") {
 		log.Printf("[ SnapTaskController ] Poll Analyzer is enabled")
 		go s.pollingAnalyzer()

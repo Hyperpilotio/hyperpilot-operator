@@ -162,12 +162,10 @@ func (c *HyperpilotOperator) Run(stopCh <-chan struct{}) error {
 	c.podInformer = InitPodInformer(c.kclient, c)
 	c.nodeInformer = InitNodeInformer(c.kclient, c)
 	c.rsInformer = InitReplicaSetInformer(c.kclient, c)
-	c.nodeInformer = InitNodeInformer(c.kclient, c)
 
 	go c.podInformer.indexInformer.Run(stopCh)
 	go c.nodeInformer.indexInformer.Run(stopCh)
 	go c.rsInformer.indexInformer.Run(stopCh)
-	go c.nodeInformer.indexInformer.Run(stopCh)
 
 	// 2. Initialize clusterState state use KubeAPI get pods, .......
 
@@ -192,10 +190,14 @@ func (c *HyperpilotOperator) Run(stopCh <-chan struct{}) error {
 	controllerWg := &sync.WaitGroup{}
 	for _, controller := range c.controllers {
 		controllerWg.Add(1)
-		go func() {
-			controller.Init(c.clusterState)
-			controllerWg.Done()
-		}()
+		// *FAILURE*
+		//go func() {
+		//	controller.Init(c.clusterState)
+		//	controllerWg.Done()
+		//}()
+
+		// *WORK*
+		go c.launch(controller, controllerWg)
 	}
 
 	controllerWg.Wait()
@@ -207,7 +209,6 @@ func (c *HyperpilotOperator) Run(stopCh <-chan struct{}) error {
 	c.podInformer.onOperatorReady()
 	c.nodeInformer.onOperatorReady()
 	c.rsInformer.onOperatorReady()
-	c.nodeInformer.onOperatorReady()
 
 	err = c.InitApiServer()
 	if err != nil {
@@ -218,6 +219,11 @@ func (c *HyperpilotOperator) Run(stopCh <-chan struct{}) error {
 	<-stopCh
 
 	return nil
+}
+
+func (c *HyperpilotOperator) launch(controller BaseController, controllerWg *sync.WaitGroup) {
+	controller.Init(c.clusterState)
+	controllerWg.Done()
 }
 
 func (c *HyperpilotOperator) accept(processor EventProcessor, resourceEnum ResourceEnum) {
