@@ -5,14 +5,13 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 
+	"github.com/hyperpilotio/hyperpilot-operator/pkg/common"
+	"github.com/hyperpilotio/hyperpilot-operator/pkg/node_spec"
 	"github.com/hyperpilotio/hyperpilot-operator/pkg/operator"
 	hsnap "github.com/hyperpilotio/hyperpilot-operator/pkg/snap"
 	"github.com/spf13/viper"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
 func main() {
@@ -33,15 +32,14 @@ func main() {
 
 	}
 	// Create clientset for interacting with the kubernetes cluster
-	clientset, err := newClientSet(config.GetBool("Operator.OutsideCluster"))
+	clientset, err := common.NewK8sClient(config.GetBool("Operator.OutsideCluster"))
 	if err != nil {
 		log.Fatalf("Unable to create clientset: %s", err.Error())
 	}
 
-	log.Printf("Starting operator...")
+	log.Printf("[ main ] Starting operator...")
 
-	controllers := []operator.EventProcessor{}
-	controllers = append(controllers, hsnap.NewSnapTaskController(config))
+	controllers := loadControllers(config)
 	hpc, err := operator.NewHyperpilotOperator(clientset, controllers, config)
 	if err != nil {
 		log.Printf("Unable to create hyperpilot operator: " + err.Error())
@@ -65,28 +63,6 @@ func main() {
 	log.Printf("Hyperpilot operator exiting")
 }
 
-func newClientSet(runOutsideCluster bool) (*kubernetes.Clientset, error) {
-	kubeConfigLocation := ""
-
-	if runOutsideCluster == true {
-		if os.Getenv("KUBECONFIG") != "" {
-			kubeConfigLocation = filepath.Join(os.Getenv("KUBECONFIG"))
-		} else {
-			homeDir := os.Getenv("HOME")
-			kubeConfigLocation = filepath.Join(homeDir, ".kube", "config")
-		}
-	}
-
-	// use the current context in kubeconfig
-	config, err := clientcmd.BuildConfigFromFlags("", kubeConfigLocation)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return kubernetes.NewForConfig(config)
-}
-
 func ReadConfig(fileConfig string) (*viper.Viper, error) {
 	viper := viper.New()
 	viper.SetConfigType("json")
@@ -102,6 +78,8 @@ func ReadConfig(fileConfig string) (*viper.Viper, error) {
 	viper.SetDefault("SnapTaskController.CreateTaskRetry", 5)
 	viper.SetDefault("Operator.OutsideCluster", false)
 	viper.SetDefault("SnapTaskController.Analyzer.Enable", true)
+	viper.SetDefault("Operator.LoadedControllers",
+		[]string{"NodeSpecController", "SnapTaskController"})
 
 	// overwrite by file
 	err := viper.ReadInConfig()
@@ -121,4 +99,21 @@ func ReadConfig(fileConfig string) (*viper.Viper, error) {
 		viper.Set("SnapTaskController.Analyzer.Enable", true)
 	}
 	return viper, nil
+}
+
+func loadControllers(config *viper.Viper) []operator.EventProcessor {
+	controllers := []operator.EventProcessor{}
+
+	controllerSet := common.StringSetFromList(config.GetStringSlice("Operator.LoadedControllers"))
+
+	if controllerSet.IsExist("SnapTaskController") {
+		controllers = append(controllers, hsnap.NewSnapTaskController(config))
+		log.Printf("[ main ] %s is Loaded", "SnapTaskController")
+	}
+
+	if controllerSet.IsExist("NodeSpecController") {
+		controllers = append(controllers, node_spec.NewNodeSpecController(config))
+		log.Printf("[ main ] %s is Loaded", "NodeSpecController")
+	}
+	return controllers
 }

@@ -95,7 +95,7 @@ func (ni *NodeInformer) onAdd(cur interface{}) {
 		Old: nil,
 	}
 
-	ni.processor.ProcessNode(e)
+	ni.handleEvent(e)
 }
 
 func (ni *NodeInformer) onDelete(cur interface{}) {
@@ -109,7 +109,7 @@ func (ni *NodeInformer) onDelete(cur interface{}) {
 		Old: nil,
 	}
 
-	ni.processor.ProcessNode(e)
+	ni.handleEvent(e)
 }
 
 func (ni *NodeInformer) onUpdate(old, cur interface{}) {
@@ -124,5 +124,5 @@ func (ni *NodeInformer) onUpdate(old, cur interface{}) {
 		Cur: curObj,
 	}
 
-	ni.processor.ProcessNode(e)
+	ni.handleEvent(e)
 }

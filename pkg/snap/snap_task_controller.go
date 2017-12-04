@@ -55,7 +55,7 @@ func NewSnapTaskController(config *viper.Viper) *SnapTaskController {
 }
 
 func (s *SnapTaskController) GetResourceEnum() operator.ResourceEnum {
-	return operator.POD | operator.NODE
+	return operator.POD
 }
 
 func (node *SnapNode) reconcileSnapState() error {

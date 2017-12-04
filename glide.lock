@@ -1,5 +1,5 @@
 hash: dd50c84baed9fd31b54c3c6b21d8a05b08b8f3ff7b46b521c69bfd265c48daf2
-updated: 2017-11-28T15:46:56.76503784-08:00
+updated: 2017-12-01T22:48:09.901512561-08:00
 imports:
 - name: github.com/armon/go-metrics
   version: 06b60999766278efd6d2b5d8418a58c3d5b99e87
@@ -162,8 +162,6 @@ imports:
 - name: golang.org/x/net
   version: f2499483f923065a842d38eb4c7f1927e6fc6e6d
   subpackages:
-  - context
-  - context/ctxhttp
   - http2
   - http2/hpack
   - idna
@@ -190,6 +188,13 @@ imports:
   version: c193cecd124b5cc722d7ee5538e945bdb3348435
 - name: gopkg.in/inf.v0
   version: 3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4
+- name: gopkg.in/mgo.v2
+  version: 3f83fa5005286a7fe593b055f0d7771a7dce4655
+  subpackages:
+  - bson
+  - internal/json
+  - internal/sasl
+  - internal/scram
 - name: gopkg.in/resty.v1
   version: 9ac9c42358f7c3c69ac9f8610e8790d7c338e85d
 - name: gopkg.in/yaml.v2

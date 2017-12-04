@@ -1,6 +1,10 @@
 {
   "Operator": {
-    "OutsideCluster": false
+    "OutsideCluster": true,
+    "LoadedControllers": [
+      "SnapTaskController",
+      "NodeSpecController"
+    ]
   },
   "APIServer": {
     "Port": "8080",
@@ -38,5 +42,17 @@
     },
     "CreateTaskRetry": 5,
     "PluginDownloadTimeoutMin": 5
+  },
+  "NodeSpecController": {
+    "Image": "ogre0403/curl-metadata:type",
+    "MongoDB": {
+      "Host": [
+        "127.0.0.1:27017"
+      ],
+      "Database": "machine",
+      "Username": "",
+      "Password": "",
+      "Collection": "type"
+    }
   }
 }
