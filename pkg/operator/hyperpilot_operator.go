@@ -190,13 +190,7 @@ func (c *HyperpilotOperator) Run(stopCh <-chan struct{}) error {
 	controllerWg := &sync.WaitGroup{}
 	for _, controller := range c.controllers {
 		controllerWg.Add(1)
-		// *FAILURE*
-		//go func() {
-		//	controller.Init(c.clusterState)
-		//	controllerWg.Done()
-		//}()
-
-		// *WORK*
+		// pass controller variable to launch() to avoid reference to the same object.
 		go c.launch(controller, controllerWg)
 	}
 
