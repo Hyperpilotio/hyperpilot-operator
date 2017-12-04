@@ -8,6 +8,14 @@ func NewStringSet() *StringSet {
 	return &StringSet{make(map[string]bool)}
 }
 
+func StringSetFromList(list []string) *StringSet {
+	newSet := NewStringSet()
+	for _, v := range list {
+		newSet.Add(v)
+	}
+	return newSet
+}
+
 func (set *StringSet) Add(s string) bool {
 	_, found := set.set[s]
 	set.set[s] = true

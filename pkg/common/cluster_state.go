@@ -65,11 +65,30 @@ func (clusterState *ClusterState) ProcessPod(e *PodEvent) {
 
 	// node info is available until pod is in running state
 	if e.EventType == UPDATE {
-		if e.Old.Status.Phase == "Pending" && e.Cur.Status.Phase == "Running" {
+		if e.Old.Status.Phase == "Pending" && (e.Cur.Status.Phase == "Running" || e.Cur.Status.Phase == "Succeeded") {
 			clusterState.Pods[e.Cur.Name] = e.Cur
 
 			log.Printf("[ ClusterState ] Insert NEW Pod {%s}", e.Cur.Name)
 		}
+	}
+}
+
+func (clusterState *ClusterState) ProcessNode(e *NodeEvent) {
+	clusterState.Lock.Lock()
+	defer clusterState.Lock.Unlock()
+
+	if e.EventType == ADD {
+		clusterState.Nodes[e.Cur.Name] = NodeInfo{
+			NodeName:   e.Cur.Name,
+			ExternalIP: e.Cur.Status.Addresses[1].Address,
+			InternalIP: e.Cur.Status.Addresses[0].Address,
+		}
+		log.Printf("[ ClusterState ] Insert New Node {%s}", e.Cur.Name)
+	}
+
+	if e.EventType == DELETE {
+		delete(clusterState.Nodes, e.Cur.Name)
+		log.Printf("[ ClusterState ] Delete Node {%s}", e.Cur.Name)
 	}
 }
 

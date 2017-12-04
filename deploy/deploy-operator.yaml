@@ -13,8 +13,17 @@ spec:
         k8s-app: hyperpilot-operator
     spec:
       containers:
-      - image: ogre0403/hyperpilot-operator:201711111140
+      - image: hyperpilot/hyperpilot-operator:latest
         command: ["/hyperpilot-operator"]
         imagePullPolicy: Always
         name: hyperpilot-operator
+        env:
+          - name: HP_POLLANALYZERENABLE
+            value: "false"
+        ports:
+          - containerPort: 8080
+            hostPort: 8080
+            protocol: TCP
+      imagePullSecrets:
+        - name: myregistrykey
       restartPolicy: Always

@@ -2,30 +2,31 @@ apiVersion: extensions/v1beta1
 kind: DaemonSet
 metadata:
   labels:
-    app: snap-goddd1
+    app: snap
     version: latest
-  name: snap-goddd1
+  name: snap
+  namespace: hyperpilot
 spec:
   selector:
     matchLabels:
-      app: snap-goddd1
+      app: snap
       version: latest
   template:
     metadata:
       labels:
-        app: snap-goddd1
+        app: snap
         version: latest
     spec:
       containers:
-      - image: ogre0403/snap:xenial
-        name: snap-goddd1
+      - image: hyperpilot/snap:xenial
+        name: snap
         command:
         - "/usr/local/bin/run.sh"
         args:
         - https://s3.us-east-2.amazonaws.com/jimmy-hyperpilot/init-resource-worker.json
+        imagePullPolicy: Always
         ports:
         - containerPort: 8181
-          hostPort: 8181
         imagePullPolicy: Always
         securityContext:
           privileged: true

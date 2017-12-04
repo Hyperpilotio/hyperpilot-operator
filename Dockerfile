@@ -20,5 +20,5 @@ RUN mkdir -p /etc/operator && chown kube-operator:kube-operator /etc/operator
 USER kube-operator
 
 COPY --from=0 /go/src/github.com/hyperpilotio/hyperpilot-operator/bin/linux/hyperpilot-operator .
-COPY --from=0 /go/src/github.com/hyperpilotio/hyperpilot-operator/example/operator_config.json /etc/operator
+COPY --from=0 /go/src/github.com/hyperpilotio/hyperpilot-operator/conf/operator_config.json /etc/operator
 CMD ["./hyperpilot-operator"]

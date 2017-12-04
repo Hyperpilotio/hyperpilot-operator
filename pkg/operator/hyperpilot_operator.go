@@ -132,7 +132,12 @@ func (c *HyperpilotOperator) ProcessDaemonSet(e *common.DaemonSetEvent) {}
 
 func (c *HyperpilotOperator) ProcessDeployment(e *common.DeploymentEvent) {}
 
-func (c *HyperpilotOperator) ProcessNode(e *common.NodeEvent) {}
+func (c *HyperpilotOperator) ProcessNode(e *common.NodeEvent) {
+	c.clusterState.ProcessNode(e)
+	for _, nodeRegister := range c.nodeRegisters {
+		nodeRegister.Receive(e)
+	}
+}
 
 func (c *HyperpilotOperator) ProcessPod(e *common.PodEvent) {
 	c.clusterState.ProcessPod(e)
@@ -185,10 +190,8 @@ func (c *HyperpilotOperator) Run(stopCh <-chan struct{}) error {
 	controllerWg := &sync.WaitGroup{}
 	for _, controller := range c.controllers {
 		controllerWg.Add(1)
-		go func() {
-			controller.Init(c.clusterState)
-			controllerWg.Done()
-		}()
+		// pass controller variable to launch() to avoid reference to the same object.
+		go c.launch(controller, controllerWg)
 	}
 
 	controllerWg.Wait()
@@ -212,6 +215,11 @@ func (c *HyperpilotOperator) Run(stopCh <-chan struct{}) error {
 	return nil
 }
 
+func (c *HyperpilotOperator) launch(controller BaseController, controllerWg *sync.WaitGroup) {
+	controller.Init(c.clusterState)
+	controllerWg.Done()
+}
+
 func (c *HyperpilotOperator) accept(processor EventProcessor, resourceEnum ResourceEnum) {
 	eventReceiver := &EventReceiver{
 		eventsChan: make(chan common.Event, 1000),
@@ -224,27 +232,27 @@ func (c *HyperpilotOperator) accept(processor EventProcessor, resourceEnum Resou
 
 	if resourceEnum.IsRegistered(POD) {
 		c.podRegisters = append(c.podRegisters, eventReceiver)
-		log.Printf("Contoller {%+v} registered resource POD", processor)
+		log.Printf("[ operator ] {%+v} registered resource POD", processor)
 	}
 
 	if resourceEnum.IsRegistered(DEPLOYMENT) {
 		c.deployRegisters = append(c.deployRegisters, eventReceiver)
-		log.Printf("Contoller {%+v} registered resource DEPLOYMENT", processor)
+		log.Printf("[ operator ] {%+v} registered resource DEPLOYMENT", processor)
 	}
 
 	if resourceEnum.IsRegistered(DAEMONSET) {
 		c.daemonSetRegisters = append(c.daemonSetRegisters, eventReceiver)
-		log.Printf("Contoller {%+v} registered resource DAEMONSET", processor)
+		log.Printf("[ operator ] {%+v} registered resource DAEMONSET", processor)
 	}
 
 	if resourceEnum.IsRegistered(NODE) {
 		c.nodeRegisters = append(c.nodeRegisters, eventReceiver)
-		log.Printf("Contoller {%+v} registered resource NODE", processor)
+		log.Printf("[ operator ] {%+v} registered resource NODE", processor)
 	}
 
 	if resourceEnum.IsRegistered(REPLICASET) {
-		c.nodeRegisters = append(c.rsRegisters, eventReceiver)
-		log.Printf("Contoller {%+v} registered resource REPLICASET", processor)
+		c.rsRegisters = append(c.rsRegisters, eventReceiver)
+		log.Printf("[ operator ] {%+v} registered resource REPLICASET", processor)
 	}
 }
 
