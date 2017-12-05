@@ -1,0 +1,48 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: mongo-serve
+  name: mongo-serve
+  namespace: hyperpilot
+spec:
+  ports:
+  - port: 27017
+    protocol: TCP
+    targetPort: 27017
+  selector:
+    app: mongo-serve
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: mongo-serve
+  name: mongo-serve
+  namespace: hyperpilot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongo-serve
+  template:
+    metadata:
+      labels:
+        app: mongo-serve
+    spec:
+      volumes:
+      - hostPath:
+          path: "/home/ubuntu/mongo_data"
+        name: mongo-data
+      hostname: mongo-serve
+      containers:
+      - volumeMounts:
+        - mountPath: "/data/db"
+          name: mongo-data
+        image: mongo:3.0.15
+        imagePullPolicy: Always
+        name: mongo-serve
+        ports:
+        - containerPort: 27017
+          protocol: TCP

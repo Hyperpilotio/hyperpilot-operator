@@ -48,7 +48,7 @@
     "CurlPodRestartLimit": 3,
     "MongoDB": {
       "Host": [
-        "127.0.0.1:27017"
+        "mongo-serve.hyperpilot:27017"
       ],
       "Database": "machine",
       "Username": "",
