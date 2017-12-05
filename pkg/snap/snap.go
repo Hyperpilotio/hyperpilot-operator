@@ -119,7 +119,6 @@ func (manager *TaskManager) CreateTask(task *Task, config *viper.Viper) (string,
 func (manager *TaskManager) isPluginLoaded(plugin *Plugin) bool {
 	r := manager.GetPlugin(plugin.Type, plugin.Name, plugin.Version)
 	if r.Err != nil {
-		log.Print("[ TaskManager ] Check Plugins failed: " + r.Err.Error())
 		return false
 	}
 	return true

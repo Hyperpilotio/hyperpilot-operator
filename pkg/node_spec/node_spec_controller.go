@@ -81,7 +81,18 @@ func (s *NodeSpecController) getNodeSpec(nodeName string) {
 				log.Printf("[ NodeSpecController ] Curl Pod {%s} Completed", pod.Name)
 				break
 			} else {
-				log.Printf("[ NodeSpecController ] Curl Pod {%s} failure", pod.Name)
+				failureCount := pod.Status.ContainerStatuses[0].RestartCount
+				log.Printf("[ NodeSpecController ] Curl Pod {%s} failure %d times", pod.Name, failureCount)
+
+				if failureCount == int32(s.config.GetInt("NodeSpecController.CurlPodRestartLimit")) {
+					log.Printf("[ NodeSpecController ] Delete curl pod because restart %d  times", failureCount)
+					err = podClient.Delete(newPod.Name, &metav1.DeleteOptions{})
+					if err != nil {
+						log.Print("[ NodeSpecController ] Delete curl pod failure: " + err.Error())
+						return
+					}
+					return
+				}
 			}
 		}
 		time.Sleep(5 * time.Second)

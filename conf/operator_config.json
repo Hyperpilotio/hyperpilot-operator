@@ -45,6 +45,7 @@
   },
   "NodeSpecController": {
     "Image": "hyperpilot/curl-metadata:machineType",
+    "CurlPodRestartLimit": 3,
     "MongoDB": {
       "Host": [
         "127.0.0.1:27017"

@@ -27,6 +27,7 @@ func main() {
 
 	flag.Parse()
 
+	setDefault()
 	config, err := ReadConfig(*configPath)
 	if err != nil {
 		log.Fatalf("Unable to read configure file: %s", err.Error())
@@ -64,6 +65,16 @@ func main() {
 	log.Printf("Hyperpilot operator exiting")
 }
 
+func setDefault() {
+	//Default
+	viper.SetDefault("SnapTaskController.CreateTaskRetry", 5)
+	viper.SetDefault("Operator.OutsideCluster", false)
+	viper.SetDefault("SnapTaskController.Analyzer.Enable", true)
+	viper.SetDefault("Operator.LoadedControllers",
+		[]string{"NodeSpecController", "SnapTaskController"})
+	viper.SetDefault("NodeSpecController.CurlPodRestartLimit", 5)
+}
+
 func ReadConfig(fileConfig string) (*viper.Viper, error) {
 	viper := viper.New()
 	viper.SetConfigType("json")
@@ -74,13 +85,6 @@ func ReadConfig(fileConfig string) (*viper.Viper, error) {
 	} else {
 		viper.SetConfigFile(fileConfig)
 	}
-
-	//Default
-	viper.SetDefault("SnapTaskController.CreateTaskRetry", 5)
-	viper.SetDefault("Operator.OutsideCluster", false)
-	viper.SetDefault("SnapTaskController.Analyzer.Enable", true)
-	viper.SetDefault("Operator.LoadedControllers",
-		[]string{"NodeSpecController", "SnapTaskController"})
 
 	// overwrite by file
 	err := viper.ReadInConfig()

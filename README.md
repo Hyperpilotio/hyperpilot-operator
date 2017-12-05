@@ -10,8 +10,9 @@
 
 ## Usage
 ### Deploy in Kubernetes cluster
-1. `kubectl create -f deploy/deploy-operator.yaml`
-2. `kubectl create -f deploy/deploy-snap.yaml`
+1. `kubectl create -f deploy/deploy-serctes.yaml`
+2. `kubectl create -f deploy/deploy-operator.yaml`
+3. `kubectl create -f deploy/deploy-snap.yaml`
 
 ### Run standalone operator (mainly use for developing & testing) 
 1. `export KUBECONFIG=/<PATH>/<TO>/kubeconfig`
