@@ -12,6 +12,7 @@ import (
 	"github.com/hyperpilotio/hyperpilot-operator/pkg/operator"
 	hsnap "github.com/hyperpilotio/hyperpilot-operator/pkg/snap"
 	"github.com/spf13/viper"
+	"strings"
 )
 
 func main() {
@@ -26,6 +27,7 @@ func main() {
 
 	flag.Parse()
 
+	setDefault()
 	config, err := ReadConfig(*configPath)
 	if err != nil {
 		log.Fatalf("Unable to read configure file: %s", err.Error())
@@ -63,6 +65,16 @@ func main() {
 	log.Printf("Hyperpilot operator exiting")
 }
 
+func setDefault() {
+	//Default
+	viper.SetDefault("SnapTaskController.CreateTaskRetry", 5)
+	viper.SetDefault("Operator.OutsideCluster", false)
+	viper.SetDefault("SnapTaskController.Analyzer.Enable", true)
+	viper.SetDefault("Operator.LoadedControllers",
+		[]string{"NodeSpecController", "SnapTaskController"})
+	viper.SetDefault("NodeSpecController.CurlPodRestartLimit", 5)
+}
+
 func ReadConfig(fileConfig string) (*viper.Viper, error) {
 	viper := viper.New()
 	viper.SetConfigType("json")
@@ -73,13 +85,6 @@ func ReadConfig(fileConfig string) (*viper.Viper, error) {
 	} else {
 		viper.SetConfigFile(fileConfig)
 	}
-
-	//Default
-	viper.SetDefault("SnapTaskController.CreateTaskRetry", 5)
-	viper.SetDefault("Operator.OutsideCluster", false)
-	viper.SetDefault("SnapTaskController.Analyzer.Enable", true)
-	viper.SetDefault("Operator.LoadedControllers",
-		[]string{"NodeSpecController", "SnapTaskController"})
 
 	// overwrite by file
 	err := viper.ReadInConfig()
@@ -103,8 +108,13 @@ func ReadConfig(fileConfig string) (*viper.Viper, error) {
 
 func loadControllers(config *viper.Viper) []operator.EventProcessor {
 	controllers := []operator.EventProcessor{}
+	controllerSet := common.NewStringSet()
 
-	controllerSet := common.StringSetFromList(config.GetStringSlice("Operator.LoadedControllers"))
+	if ctls := os.Getenv("HP_CONTROLLERS"); ctls != "" {
+		controllerSet = common.StringSetFromList(strings.Split(ctls, ","))
+	} else {
+		controllerSet = common.StringSetFromList(config.GetStringSlice("Operator.LoadedControllers"))
+	}
 
 	if controllerSet.IsExist("SnapTaskController") {
 		controllers = append(controllers, hsnap.NewSnapTaskController(config))

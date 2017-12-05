@@ -44,7 +44,8 @@
     "PluginDownloadTimeoutMin": 5
   },
   "NodeSpecController": {
-    "Image": "ogre0403/curl-metadata:type",
+    "Image": "hyperpilot/curl-metadata:machineType",
+    "CurlPodRestartLimit": 3,
     "MongoDB": {
       "Host": [
         "127.0.0.1:27017"
