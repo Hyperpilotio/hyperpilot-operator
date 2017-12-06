@@ -433,7 +433,6 @@ func (server *APIServer) getClusterAppMetrics(c *gin.Context) {
 		log.Printf("[ APIServer ] Can't find Pod for %s {%s}: %s", req.K8sType, req.Name, err.Error())
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": true,
-			//"cause": "Can't find Pod: " + err.Error(),
 			"cause": fmt.Sprintf("Failed to get Pod for %s {%s}: %s \n", req.K8sType, req.Name, err.Error())})
 		return
 	}
@@ -444,7 +443,8 @@ func (server *APIServer) getClusterAppMetrics(c *gin.Context) {
 			externalIP := server.ClusterState.FindPodRunningNodeInfo(pod.Name).ExternalIP
 			url = "http://" + externalIP + ":" + strconv.Itoa(int(req.Prometheus.MetricPort)) + "/metrics"
 		} else {
-			url = "http://" + pod.Name + "." + req.Namespace + ":" + strconv.Itoa(int(req.Prometheus.MetricPort)) + "/metrics"
+			podIP := pod.Status.PodIP
+			url = "http://" + podIP + ":" + strconv.Itoa(int(req.Prometheus.MetricPort)) + "/metrics"
 		}
 		metricResp, err := getPrometheusMetrics(url)
 		if err != nil {

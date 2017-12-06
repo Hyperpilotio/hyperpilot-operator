@@ -5,8 +5,7 @@
 `make build-image`
 
 ### Build standalone operator
-1. `make install_deps`
-2. `make build`
+`make install_deps; make build`
 
 ## Usage
 ### Deploy in Kubernetes cluster

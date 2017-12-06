@@ -24,8 +24,6 @@ spec:
             value: "SnapTaskController"
         ports:
           - containerPort: 8080
-            hostPort: 8080
-            protocol: TCP
       imagePullSecrets:
         - name: myregistrykey
       restartPolicy: Always
