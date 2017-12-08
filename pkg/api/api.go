@@ -14,7 +14,6 @@ import (
 	"github.com/prometheus/common/expfmt"
 	"github.com/spf13/viper"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/api/v1"
 	appv1beta1 "k8s.io/client-go/pkg/apis/apps/v1beta1"
@@ -123,11 +122,7 @@ func (server *APIServer) getClusterSpecs(c *gin.Context) {
 				v.TypeMeta = metav1.TypeMeta{
 					Kind: "Service",
 				}
-				list, err = server.getServicePodNameList(v)
-				if err != nil {
-					log.Printf("[ APIServer ] Can't get pods name of service {%s}. Skip : %s", v.Name, err.Error())
-					continue
-				}
+				list = server.getServicePodNameList(v)
 			}
 			serviceResponse = append(serviceResponse,
 				ServiceResponse{
@@ -198,21 +193,13 @@ func (server *APIServer) getStatefulSetPodNameList(statefulset *appv1beta1.State
 	return &podNameList
 }
 
-func (server *APIServer) getServicePodNameList(service *v1.Service) (*[]string, error) {
-	// todo: get pod from ClusterState, not use k8s client??
-	set := labels.Set(service.Spec.Selector)
+func (server *APIServer) getServicePodNameList(service *v1.Service) *[]string {
+	pods := server.ClusterState.FindServicePod(service.Namespace, service)
 	podNameList := []string{}
-	pods, err := server.K8sClient.CoreV1Client.Pods(service.Namespace).List(metav1.ListOptions{LabelSelector: set.String()})
-	if err != nil {
-		log.Printf("[ APIServer ] List Pods of service[%s] error: %s", service.GetName(), err.Error())
-		return nil, err
-	}
-	for _, v := range pods.Items {
+	for _, v := range pods {
 		podNameList = append(podNameList, v.Name)
-
 	}
-
-	return &podNameList, nil
+	return &podNameList
 }
 
 func (server *APIServer) getAllDeployment(namespace string, deployments []string) (map[string]*extv1beta1.Deployment, error) {

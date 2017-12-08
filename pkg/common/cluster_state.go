@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/api/v1"
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
@@ -196,16 +197,21 @@ func (clusterState *ClusterState) FindStatefulSetPod(namespace, statefulSetName 
 	return r
 }
 
-func (clusterState *ClusterState) FindServicePod(namespace, service string) []*v1.Pod {
+func (clusterState *ClusterState) FindServicePod(namespace string, service *v1.Service) []*v1.Pod {
 	clusterState.Lock.RLock()
 	defer clusterState.Lock.RUnlock()
 
+	serviceSeclector := labels.Set(service.Spec.Selector).AsSelector()
 	r := []*v1.Pod{}
 	for _, pod := range clusterState.Pods {
-
-		r = append(r, pod)
+		podLabel := labels.Set(pod.Labels)
+		if pod.Namespace == namespace && serviceSeclector.Matches(podLabel) {
+			r = append(r, pod)
+		}
 	}
-
+	if len(r) == 0 {
+		log.Printf("[ ClusterState ] Can't find pod for Service {%s} in namespace {%s} ", service.Name, namespace)
+	}
 	return r
 }
 
