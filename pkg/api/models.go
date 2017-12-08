@@ -23,19 +23,19 @@ type SpecResponse struct {
 type DeploymentResponse struct {
 	Name           string                 `json:"name"`
 	DeploymentSpec *extv1beta1.Deployment `json:"k8s_spec"`
-	PodNameList    *[]string              `json:"pod"`
+	PodNameList    *[]string              `json:"pods"`
 }
 
 type ServiceResponse struct {
 	Name        string      `json:"name"`
 	ServiceSpec *v1.Service `json:"k8s_spec"`
-	PodNameList *[]string   `json:"pod"`
+	PodNameList *[]string   `json:"pods"`
 }
 
 type StatefulSetResponse struct {
 	Name            string                  `json:"name"`
 	StatefulSetSpec *appv1beta1.StatefulSet `json:"k8s_spec"`
-	PodNameList     *[]string               `json:"pod"`
+	PodNameList     *[]string               `json:"pods"`
 }
 
 type MappingResponse struct {

@@ -43,7 +43,8 @@
               "metadata": {},
               "spec": {},
               "status": {}
-            }
+            },
+             "pods" :[ "p1", "p2"]
           },
           {
             "name": "deployment2",
@@ -52,7 +53,8 @@
               "metadata": {},
               "spec": {},
               "status": {}
-            }
+            },
+            "pods" :["p1", "p3"]
           }
         ],
         "services": [
@@ -63,7 +65,8 @@
               "metadata": {},
               "spec": {},
               "status": {}
-            }
+            },
+           "pods" :["p1", "p3"]
           }
         ],
         "statefulsets": []

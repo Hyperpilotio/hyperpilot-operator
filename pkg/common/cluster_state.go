@@ -201,11 +201,11 @@ func (clusterState *ClusterState) FindServicePod(namespace string, service *v1.S
 	clusterState.Lock.RLock()
 	defer clusterState.Lock.RUnlock()
 
-	serviceSeclector := labels.Set(service.Spec.Selector).AsSelector()
+	serviceSelector := labels.Set(service.Spec.Selector).AsSelector()
 	r := []*v1.Pod{}
 	for _, pod := range clusterState.Pods {
 		podLabel := labels.Set(pod.Labels)
-		if pod.Namespace == namespace && serviceSeclector.Matches(podLabel) {
+		if pod.Namespace == namespace && serviceSelector.Matches(podLabel) {
 			r = append(r, pod)
 		}
 	}
