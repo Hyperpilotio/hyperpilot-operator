@@ -1,4 +1,4 @@
-package operator
+package api
 
 import (
 	"bytes"
@@ -86,15 +86,23 @@ func (server *APIServer) getClusterSpecs(c *gin.Context) {
 			return
 		}
 		for k, v := range allDeployment {
+			// v is nil if not found
+			var list *[]string
 			if v != nil {
 				v.TypeMeta = metav1.TypeMeta{
 					Kind: "Deployment",
+				}
+				list, err = server.getDeploymenrtPodNameList(v)
+				if err != nil {
+					log.Printf("[ APIServer ] Can't get pods name of deployment {%s}. Skip : %s", v.Name, err.Error())
+					continue
 				}
 			}
 			deploymentResponse = append(deploymentResponse,
 				DeploymentResponse{
 					Name:           k,
 					DeploymentSpec: v,
+					PodNameList:    list,
 				})
 		}
 
@@ -132,15 +140,19 @@ func (server *APIServer) getClusterSpecs(c *gin.Context) {
 			return
 		}
 		for k, v := range allStateful {
+			// v is nil if not found
+			var list *[]string
 			if v != nil {
 				v.TypeMeta = metav1.TypeMeta{
 					Kind: "StatefulSet",
 				}
+				list = server.getStatefulSetPodNameList(v)
 			}
 			statefulsetResponse = append(statefulsetResponse,
 				StatefulSetResponse{
 					Name:            k,
 					StatefulSetSpec: v,
+					PodNameList:     list,
 				})
 		}
 
@@ -152,6 +164,30 @@ func (server *APIServer) getClusterSpecs(c *gin.Context) {
 		})
 	}
 	c.JSON(http.StatusOK, resp)
+}
+
+func (server *APIServer) getDeploymenrtPodNameList(deployment *extv1beta1.Deployment) (*[]string, error) {
+	hash, err := server.ClusterState.FindReplicaSetHash(deployment.Name)
+	if err != nil {
+		log.Printf("[ APIServer ] pod-template-hash is not found for deployment {%s}", deployment.Name)
+		return nil, err
+	}
+	pods := server.ClusterState.FindDeploymentPod(deployment.Namespace, deployment.Name, hash)
+
+	podNameList := []string{}
+	for _, v := range pods {
+		podNameList = append(podNameList, v.Name)
+	}
+	return &podNameList, nil
+}
+
+func (server *APIServer) getStatefulSetPodNameList(statefulset *appv1beta1.StatefulSet) *[]string {
+	pods := server.ClusterState.FindStatefulSetPod(statefulset.Namespace, statefulset.Name)
+	podNameList := []string{}
+	for _, v := range pods {
+		podNameList = append(podNameList, v.Name)
+	}
+	return &podNameList
 }
 
 func (server *APIServer) getAllDeployment(namespace string, deployments []string) (map[string]*extv1beta1.Deployment, error) {

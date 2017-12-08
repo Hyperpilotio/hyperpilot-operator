@@ -5,6 +5,7 @@ import (
 	"log"
 	"sync"
 
+	"github.com/hyperpilotio/hyperpilot-operator/pkg/api"
 	"github.com/hyperpilotio/hyperpilot-operator/pkg/common"
 	"github.com/spf13/viper"
 	"k8s.io/client-go/kubernetes"
@@ -257,7 +258,7 @@ func (c *HyperpilotOperator) accept(processor EventProcessor, resourceEnum Resou
 }
 
 func (c *HyperpilotOperator) InitApiServer() error {
-	err := NewAPIServer(c.clusterState, c.kclient, c.config).Run()
+	err := api.NewAPIServer(c.clusterState, c.kclient, c.config).Run()
 	if err != nil {
 		return err
 	}

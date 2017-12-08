@@ -1,4 +1,4 @@
-package operator
+package api
 
 import (
 	"k8s.io/client-go/pkg/api/v1"
@@ -23,16 +23,19 @@ type SpecResponse struct {
 type DeploymentResponse struct {
 	Name           string                 `json:"name"`
 	DeploymentSpec *extv1beta1.Deployment `json:"k8s_spec"`
+	PodNameList    *[]string              `json:"pod"`
 }
 
 type ServiceResponse struct {
 	Name        string      `json:"name"`
 	ServiceSpec *v1.Service `json:"k8s_spec"`
+	PodNameList *[]string   `json:"pod"`
 }
 
 type StatefulSetResponse struct {
 	Name            string                  `json:"name"`
 	StatefulSetSpec *appv1beta1.StatefulSet `json:"k8s_spec"`
+	PodNameList     *[]string               `json:"pod"`
 }
 
 type MappingResponse struct {

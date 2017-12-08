@@ -196,6 +196,19 @@ func (clusterState *ClusterState) FindStatefulSetPod(namespace, statefulSetName 
 	return r
 }
 
+func (clusterState *ClusterState) FindServicePod(namespace, service string) []*v1.Pod {
+	clusterState.Lock.RLock()
+	defer clusterState.Lock.RUnlock()
+
+	r := []*v1.Pod{}
+	for _, pod := range clusterState.Pods {
+
+		r = append(r, pod)
+	}
+
+	return r
+}
+
 func (clusterState *ClusterState) FindPodRunningNodeInfo(podName string) NodeInfo {
 	clusterState.Lock.RLock()
 	defer clusterState.Lock.RUnlock()
