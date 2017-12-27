@@ -143,7 +143,7 @@ func (analyzerPoller *AnalyzerPoller) updateRunningServicePods(pods []*v1.Pod) {
 			analyzerPoller.SnapController.SnapNode.runningPodsMx.Lock()
 			delete(analyzerPoller.SnapController.SnapNode.RunningServicePods, podName)
 			analyzerPoller.SnapController.SnapNode.runningPodsMx.Unlock()
-			log.Printf("delete Running Service Pod {%analyzerPoller} in Node {%analyzerPoller} ", podName, analyzerPoller.SnapNode.NodeId)
+			log.Printf("delete Running Service Pod {%analyzerPoller} in Node {%analyzerPoller} ", podName, analyzerPoller.SnapController.SnapNode.NodeId)
 		}
 	}
 }
