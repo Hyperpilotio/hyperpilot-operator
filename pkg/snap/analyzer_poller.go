@@ -26,7 +26,7 @@ func NewAnalyzerPoller(config *viper.Viper, snapController *SingleSnapController
 	}
 }
 
-func (analyzerPoller *AnalyzerPoller) pollingAnalyzer() {
+func (analyzerPoller *AnalyzerPoller) run() {
 	tick := time.Tick(3 * time.Second)
 	for {
 		select {

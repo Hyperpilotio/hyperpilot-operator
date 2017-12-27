@@ -29,10 +29,18 @@
   Overwrite SnapTaskController.Analyzer.Enable
   
   `usage: HP_POLLANALYZERENABLE=true|false`
+  
+* HP_ANALYZERADDRESS
+
+  Overwrite SnapTaskController.Analyzer.Address
+  
+  `usage: HP_ANALYZERADDRESS=127.0.0.1`
+
+
 
 
 * HP_CONTROLLERS
 
   Overwrite Operator.LoadedControllers
 
-  `usage: HP_CONTROLLERS=SnapTaskController,NodeSpecController`
+  `usage: HP_CONTROLLERS=SingleSnapController,NodeSpecController,SnapTaskController`

@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/hyperpilotio/hyperpilot-operator/pkg/common"
@@ -12,7 +13,6 @@ import (
 	"github.com/hyperpilotio/hyperpilot-operator/pkg/operator"
 	hsnap "github.com/hyperpilotio/hyperpilot-operator/pkg/snap"
 	"github.com/spf13/viper"
-	"strings"
 )
 
 func main() {
@@ -103,6 +103,9 @@ func ReadConfig(fileConfig string) (*viper.Viper, error) {
 		viper.Set("SnapTaskController.Analyzer.Enable", false)
 	} else if os.Getenv("HP_POLLANALYZERENABLE") == "true" {
 		viper.Set("SnapTaskController.Analyzer.Enable", true)
+	}
+	if addr := os.Getenv("HP_ANALYZERADDRESS"); addr != "" {
+		viper.Set("SnapTaskController.Analyzer.Address", addr)
 	}
 	return viper, nil
 }
