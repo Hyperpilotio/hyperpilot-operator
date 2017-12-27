@@ -264,3 +264,9 @@ func (c *HyperpilotOperator) InitApiServer() error {
 	}
 	return nil
 }
+
+func (c *HyperpilotOperator) Close() {
+	for _, controller := range c.controllers {
+		controller.Close()
+	}
+}

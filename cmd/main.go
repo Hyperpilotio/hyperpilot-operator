@@ -58,6 +58,7 @@ func main() {
 
 	// Wait for signal or error from operator
 	<-sigs
+	hpc.Close()
 
 	// Signal all goroutines in operator to exit
 	close(stop)
@@ -119,6 +120,11 @@ func loadControllers(config *viper.Viper) []operator.EventProcessor {
 	if controllerSet.IsExist("SnapTaskController") {
 		controllers = append(controllers, hsnap.NewSnapTaskController(config))
 		log.Printf("[ main ] %s is Loaded", "SnapTaskController")
+	}
+
+	if controllerSet.IsExist("SingleSnapController") {
+		controllers = append(controllers, hsnap.NewSingleSnapController(config))
+		log.Printf("[ main ] %s is Loaded", "SingleSnapController")
 	}
 
 	if controllerSet.IsExist("NodeSpecController") {

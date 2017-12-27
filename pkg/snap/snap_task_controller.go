@@ -16,25 +16,6 @@ import (
 	"k8s.io/client-go/pkg/api/v1"
 )
 
-type ServicePodInfo struct {
-	Namespace string
-	Port      int32
-}
-
-type SnapNode struct {
-	NodeId             string
-	ExternalIP         string
-	TaskManager        *TaskManager
-	snapTaskMx         *sync.Mutex
-	SnapTasks          map[string]string
-	runningPodsMx      *sync.Mutex
-	RunningServicePods map[string]ServicePodInfo
-	PodEvents          chan *common.PodEvent
-	ExitChan           chan bool
-	ServiceList        *[]string
-	config             *viper.Viper
-}
-
 type SnapTaskController struct {
 	ServiceList    []string
 	snapNodeMx     *sync.Mutex
@@ -58,43 +39,6 @@ func (s *SnapTaskController) GetResourceEnum() operator.ResourceEnum {
 	return operator.POD
 }
 
-func (node *SnapNode) reconcileSnapState() error {
-	node.runningPodsMx.Lock()
-	defer node.runningPodsMx.Unlock()
-	node.snapTaskMx.Lock()
-	defer node.snapTaskMx.Unlock()
-
-	for servicePodName, podInfo := range node.RunningServicePods {
-		_, ok := node.SnapTasks[servicePodName]
-		if !ok {
-			task := NewPrometheusCollectorTask(servicePodName, podInfo.Namespace, podInfo.Port, node.config)
-			_, err := node.TaskManager.CreateTask(task, node.config)
-			if err != nil {
-				return err
-			}
-			node.SnapTasks[servicePodName] = task.Name
-			log.Printf("[ SnapNode ] Create task {%s} in Node {%s}", task.Name, node.NodeId)
-		}
-	}
-
-	for servicePodName, taskName := range node.SnapTasks {
-		_, ok := node.RunningServicePods[servicePodName]
-		if !ok {
-			taskId, err := getTaskIDFromTaskName(node.TaskManager, taskName)
-			if err != nil {
-				return err
-			}
-			err = node.TaskManager.StopAndRemoveTask(taskId)
-			if err != nil {
-				return nil
-			}
-			delete(node.SnapTasks, servicePodName)
-			log.Printf("[ SnapNode ] Delete task {%s} in Node {%s}", taskName, node.NodeId)
-		}
-	}
-	return nil
-}
-
 func (s *SnapTaskController) reconcileSnapState() bool {
 	for _, node := range s.Nodes {
 		node.reconcileSnapState()
@@ -110,22 +54,6 @@ func getTaskIDFromTaskName(manager *TaskManager, name string) (string, error) {
 		}
 	}
 	return "", errors.New("Can not find ID from Name")
-}
-
-func NewSnapNode(nodeName string, externalIp string, serviceList *[]string, config *viper.Viper) *SnapNode {
-	return &SnapNode{
-		NodeId:             nodeName,
-		ExternalIP:         externalIp,
-		runningPodsMx:      &sync.Mutex{},
-		RunningServicePods: make(map[string]ServicePodInfo),
-		snapTaskMx:         &sync.Mutex{},
-		SnapTasks:          make(map[string]string),
-		TaskManager:        nil,
-		PodEvents:          make(chan *common.PodEvent, 1000),
-		ExitChan:           make(chan bool, 1),
-		ServiceList:        serviceList,
-		config:             config,
-	}
 }
 
 func (s *SnapTaskController) Init(clusterState *common.ClusterState) error {
@@ -157,74 +85,6 @@ func (s *SnapTaskController) Init(clusterState *common.ClusterState) error {
 		log.Printf("[ SnapTaskController ] Poll Analyzer is enabled")
 		go s.pollingAnalyzer()
 	}
-	return nil
-}
-
-func (n *SnapNode) init(isOutsideCluster bool, clusterState *common.ClusterState) (bool, error) {
-	clusterState.Lock.RLock()
-	defer clusterState.Lock.RUnlock()
-
-	for _, p := range clusterState.Pods {
-		if n.NodeId == p.Spec.NodeName && isSnapPod(p) {
-			if err := n.initSnap(isOutsideCluster, p, clusterState); err != nil {
-				return true, err
-			}
-			return true, nil
-		}
-	}
-	log.Printf("Snap is not found in cluster for node %s during init", n.NodeId)
-	return false, nil
-}
-
-func (n *SnapNode) initSnap(isOutsideCluster bool, snapPod *v1.Pod, clusterState *common.ClusterState) error {
-	var taskManager *TaskManager
-	var err error
-	if isOutsideCluster {
-		taskManager, err = NewTaskManager(n.ExternalIP, n.config)
-	} else {
-		taskManager, err = NewTaskManager(snapPod.Status.PodIP, n.config)
-	}
-
-	if err != nil {
-		log.Printf("Failed to create Snap Task Manager: " + err.Error())
-		return err
-	}
-
-	n.TaskManager = taskManager
-
-	//todo: how to initSnap if timeout
-	err = n.TaskManager.WaitForLoadPlugins(n.config.GetInt("SnapTaskController.PluginDownloadTimeoutMin"))
-	if err != nil {
-		log.Printf("Failed to create Snap Task Manager in Node {%s}: {%s}", n.NodeId, err.Error())
-		return err
-	}
-	log.Printf("[ SnapNode ] {%s} Loads Plugin  Complete", n.NodeId)
-
-	tasks := n.TaskManager.GetTasks()
-	for _, task := range tasks.ScheduledTasks {
-		if isSnapControllerTask(task.Name) {
-			servicePodName := getServicePodNameFromSnapTask(task.Name)
-			n.SnapTasks[servicePodName] = task.Name
-		}
-	}
-
-	clusterState.Lock.RLock()
-	for _, p := range clusterState.Pods {
-		if p.Spec.NodeName == n.NodeId && n.isServicePod(p) {
-			// TODO: How do we know which container has the right port? and which port?
-			container := p.Spec.Containers[0]
-			if len(container.Ports) > 0 {
-				n.RunningServicePods[p.Name] = ServicePodInfo{
-					Namespace: p.Namespace,
-					Port:      container.Ports[0].HostPort,
-				}
-			}
-		}
-	}
-	clusterState.Lock.RUnlock()
-
-	n.reconcileSnapState()
-	n.Run(isOutsideCluster)
 	return nil
 }
 
@@ -281,52 +141,6 @@ func (s *SnapTaskController) ProcessPod(e *common.PodEvent) {
 	}
 }
 
-func (n *SnapNode) Run(isOutsideCluster bool) {
-	go func() {
-		for {
-			select {
-			case <-n.ExitChan:
-				log.Printf("[ SnapNode ] {%s} signaled to exit", n.NodeId)
-				return
-			case e := <-n.PodEvents:
-				switch e.EventType {
-				case common.ADD, common.UPDATE:
-					container := e.Cur.Spec.Containers[0]
-					n.runningPodsMx.Lock()
-					n.RunningServicePods[e.Cur.Name] = ServicePodInfo{
-						Namespace: e.Cur.Namespace,
-						Port:      container.Ports[0].HostPort,
-					}
-					n.runningPodsMx.Unlock()
-					if err := n.reconcileSnapState(); err != nil {
-						log.Printf("Unable to reconcile snap state: %s", err.Error())
-						return
-					}
-					log.Printf("[ SnapNode ] Insert Service Pod {%s}", e.Cur.Name)
-
-				case common.DELETE:
-					if _, ok := n.RunningServicePods[e.Cur.Name]; ok {
-						n.runningPodsMx.Lock()
-						delete(n.RunningServicePods, e.Cur.Name)
-						n.runningPodsMx.Unlock()
-						if err := n.reconcileSnapState(); err != nil {
-							log.Printf("Unable to reconcile snap state: %s", err.Error())
-							return
-						}
-						log.Printf("[ SnapNode ] Delete Service Pod {%s}", e.Cur.Name)
-					} else {
-						log.Printf("Unable to find and delete service pod {%s} in running tasks!", e.Cur.Name)
-					}
-				}
-			}
-		}
-	}()
-}
-
-func (node *SnapNode) Exit() {
-	node.ExitChan <- true
-}
-
 func getServicePodNameFromSnapTask(taskName string) string {
 	return strings.SplitN(taskName, "-", 2)[1]
 }
@@ -340,15 +154,6 @@ func isSnapControllerTask(taskName string) bool {
 
 func (s *SnapTaskController) String() string {
 	return fmt.Sprintf("SnapTaskController")
-}
-
-func (node *SnapNode) isServicePod(pod *v1.Pod) bool {
-	for _, service := range *node.ServiceList {
-		if strings.HasPrefix(pod.Name, service) {
-			return true
-		}
-	}
-	return false
 }
 
 func isSnapPod(pod *v1.Pod) bool {
@@ -539,3 +344,5 @@ func (s *SnapTaskController) ProcessDaemonSet(e *common.DaemonSetEvent) {}
 func (s *SnapTaskController) ProcessNode(e *common.NodeEvent) {}
 
 func (s *SnapTaskController) ProcessReplicaSet(e *common.ReplicaSetEvent) {}
+
+func (s *SnapTaskController) Close() {}
