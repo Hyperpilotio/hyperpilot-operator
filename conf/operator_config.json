@@ -3,12 +3,12 @@
     "OutsideCluster": false,
     "LoadedControllers": [
       "NodeSpecController",
-      "SnapTaskController"
+      "SingleSnapController"
     ]
   },
   "APIServer": {
     "Port": "8080",
-    "Debug": true
+    "Debug": false
   },
   "SnapTaskController": {
     "PluginsList": [
