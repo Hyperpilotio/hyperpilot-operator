@@ -11,6 +11,7 @@
     "Debug": false
   },
   "SnapTaskController": {
+    "SnapDeploymentYamlURL": "https://s3.us-east-2.amazonaws.com/jimmy-hyperpilot/snap-deployment-sample.yaml",
     "PluginsList": [
       {
         "Name": "snap-plugin-collector-prometheus",

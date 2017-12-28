@@ -5,9 +5,7 @@
     "snap-plugin-collector-prometheus": "https://s3.us-east-2.amazonaws.com/jimmy-hyperpilot/snap-plugin-collector-prometheus",
     "snap-average-counter-processor": "https://s3.amazonaws.com/snap-tech-demo-files/snap-average-counter-processor"
   },
-  "tasks": [
-    "https://s3.amazonaws.com/hyperpilot-tech-demo-snap/snap-k8s-procfs-cpu.json"
-  ],
+  "tasks": [],
   "configs": [
     "https://s3.amazonaws.com/hyperpilot-snap-collectors/snap-resource-worker-2/snap-plugin-collector-prometheus-config"
   ],

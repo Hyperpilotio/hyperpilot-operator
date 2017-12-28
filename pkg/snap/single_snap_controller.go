@@ -54,7 +54,13 @@ func (s *SingleSnapController) Init(clusterState *common.ClusterState) error {
 	deployClient := kclient.ExtensionsV1beta1Client.Deployments(HYPERPILOT_SNAP_NS)
 
 	// build snap spec
-	deployment := s.makeSnapDeployment()
+	deployment, err := common.CreateDeploymentFromYamlUrl(s.config.GetString("SnapTaskController.SnapDeploymentYamlURL"))
+	if err != nil {
+		log.Printf("[ SingleSnapController ] Canot read YAML file from url: %s ", err.Error())
+		return err
+	}
+	deployment.Name = HYPERPILOT_SNAP_DEPLOYMENT_NAME
+	deployment.Namespace = HYPERPILOT_SNAP_NS
 
 	// create snap deployment
 	_, err = deployClient.Create(deployment)
@@ -91,156 +97,6 @@ func (s *SingleSnapController) Init(clusterState *common.ClusterState) error {
 	}
 
 	return nil
-}
-
-func int32Ptr(i int32) *int32 { return &i }
-
-func bool2Ptr(b bool) *bool { return &b }
-
-func (s *SingleSnapController) makeSnapDeploymentSpec() *v1beta1.DeploymentSpec {
-
-	var conPort v1.ContainerPort
-	if s.isOutsideCluster() {
-		conPort = v1.ContainerPort{
-			ContainerPort: 8181,
-			HostPort:      8181,
-		}
-	} else {
-		conPort = v1.ContainerPort{
-			ContainerPort: 8181,
-		}
-	}
-
-	return &v1beta1.DeploymentSpec{
-		Replicas: int32Ptr(1),
-		Template: v1.PodTemplateSpec{
-			ObjectMeta: metav1.ObjectMeta{
-				Labels: map[string]string{
-					"app":     "snap",
-					"version": "latest",
-				},
-			},
-			Spec: v1.PodSpec{
-				Containers: []v1.Container{
-					{
-						Image: "hyperpilot/snap:xenial",
-						Name:  "snap",
-						Command: []string{
-							"/usr/local/bin/run.sh",
-						},
-						Args: []string{
-							"https://s3.us-east-2.amazonaws.com/jimmy-hyperpilot/init-snap-no-task.json",
-						},
-						ImagePullPolicy: v1.PullAlways,
-						Ports: []v1.ContainerPort{
-							conPort,
-						},
-						SecurityContext: &v1.SecurityContext{
-							Privileged: bool2Ptr(true),
-						},
-						Env: []v1.EnvVar{
-							{
-								Name: "NODE_NAME",
-								ValueFrom: &v1.EnvVarSource{
-									FieldRef: &v1.ObjectFieldSelector{
-										FieldPath: "spec.nodeName",
-									},
-								},
-							},
-						},
-						VolumeMounts: []v1.VolumeMount{
-							{
-								Name:      "var-run",
-								MountPath: "/var/run",
-							},
-							{
-								Name:      "var-log",
-								MountPath: "/var/log",
-							},
-							{
-								Name:      "cgroup",
-								MountPath: "/sys/fs/cgroup",
-							},
-							{
-								Name:      "var-lib-docker",
-								MountPath: "/var/lib/docker",
-							},
-							{
-								Name:      "usr-bin-docker",
-								MountPath: "/usr/local/bin/docker",
-							},
-							{
-								Name:      "proc",
-								MountPath: "/proc_host",
-							},
-						},
-					},
-				},
-				Volumes: []v1.Volume{
-					{
-						Name: "cgroup",
-						VolumeSource: v1.VolumeSource{
-							HostPath: &v1.HostPathVolumeSource{
-								Path: "/sys/fs/cgroup",
-							},
-						},
-					},
-					{
-						Name: "var-lib-docker",
-						VolumeSource: v1.VolumeSource{
-							HostPath: &v1.HostPathVolumeSource{
-								Path: "/var/lib/docker/",
-							},
-						},
-					},
-					{
-						Name: "var-log",
-						VolumeSource: v1.VolumeSource{
-							HostPath: &v1.HostPathVolumeSource{
-								Path: "/var/log",
-							},
-						},
-					},
-					{
-						Name: "var-run",
-						VolumeSource: v1.VolumeSource{
-							HostPath: &v1.HostPathVolumeSource{
-								Path: "/var/run",
-							},
-						},
-					},
-					{
-						Name: "usr-bin-docker",
-						VolumeSource: v1.VolumeSource{
-							HostPath: &v1.HostPathVolumeSource{
-								Path: "/usr/bin/docker",
-							},
-						},
-					},
-					{
-						Name: "proc",
-						VolumeSource: v1.VolumeSource{
-							HostPath: &v1.HostPathVolumeSource{
-								Path: "/proc",
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-}
-
-func (s *SingleSnapController) makeSnapDeployment() *v1beta1.Deployment {
-	spec := s.makeSnapDeploymentSpec()
-
-	return &v1beta1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      HYPERPILOT_SNAP_DEPLOYMENT_NAME,
-			Namespace: HYPERPILOT_SNAP_NS,
-		},
-		Spec: *spec,
-	}
 }
 
 func (s *SingleSnapController) createSnapNode() error {
