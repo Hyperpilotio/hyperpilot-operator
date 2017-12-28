@@ -79,6 +79,7 @@ func (s *SingleSnapController) Init(clusterState *common.ClusterState) error {
 
 		for _, cond := range d.Status.Conditions {
 			if cond.Type == v1beta1.DeploymentAvailable && cond.Status == v1.ConditionTrue {
+				log.Printf("[ SingleSnapController ] Deployment {%s} is ready, create SnapNode", hyperpilotSnapDeploymentName)
 				if err := s.createSnapNode(); err != nil {
 					log.Printf("[ SingleSnapController ] Create SnapNode fail: %s ", err.Error())
 					return err
@@ -87,7 +88,7 @@ func (s *SingleSnapController) Init(clusterState *common.ClusterState) error {
 				return nil
 			}
 		}
-		log.Print("[ SingleSnapController ] wait create snap node")
+		log.Printf("[ SingleSnapController ] Wait for deployment {%s} ready", hyperpilotSnapDeploymentName)
 		time.Sleep(5 * time.Second)
 	}
 
