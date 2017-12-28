@@ -31,9 +31,7 @@ func (analyzerPoller *AnalyzerPoller) run() {
 	for {
 		select {
 		case <-tick:
-			analyzerURL := fmt.Sprintf("%s%s%s%d%s",
-				"http://", analyzerPoller.config.GetString("SnapTaskController.Analyzer.Address"),
-				":", analyzerPoller.config.GetInt("SnapTaskController.Analyzer.Port"), API_APPS)
+			analyzerURL := analyzerPoller.getEndpoint(API_APPS)
 			appResp := AppResponses{}
 			resp, err := resty.R().Get(analyzerURL)
 			if err != nil {
@@ -51,9 +49,7 @@ func (analyzerPoller *AnalyzerPoller) run() {
 }
 
 func (analyzerPoller *AnalyzerPoller) checkApplications(appResps []AppResponse) {
-	analyzerURL := fmt.Sprintf("%s%s%s%d%s",
-		"http://", analyzerPoller.config.GetString("SnapTaskController.Analyzer.Address"),
-		":", analyzerPoller.config.GetInt("SnapTaskController.Analyzer.Port"), API_K8SSERVICES)
+	analyzerURL := analyzerPoller.getEndpoint(API_K8SSERVICES)
 
 	svcResp := ServiceResponse{}
 	if !analyzerPoller.SnapController.SnapNode.TaskManager.isReady() {
@@ -167,4 +163,11 @@ func (analyzerPoller *AnalyzerPoller) isAppSetChange(appResps []AppResponse) boo
 		analyzerPoller.ApplicationSet = app_set
 		return true
 	}
+}
+
+func (analyzerPoller *AnalyzerPoller) getEndpoint(path string) string {
+	endpoint := fmt.Sprintf("%s%s%s%d%s",
+		"http://", analyzerPoller.config.GetString("SnapTaskController.Analyzer.Address"),
+		":", analyzerPoller.config.GetInt("SnapTaskController.Analyzer.Port"), path)
+	return endpoint
 }

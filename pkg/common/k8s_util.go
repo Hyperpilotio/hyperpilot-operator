@@ -39,13 +39,13 @@ func NewK8sClient(runOutsideCluster bool) (*kubernetes.Clientset, error) {
 func CreateDeploymentFromYamlUrl(yamlURL string) (*v1beta1.Deployment, error) {
 	resp, err := http.Get(yamlURL)
 	if err != nil {
-		log.Printf("%s", err.Error())
+		log.Printf("Http Get from URL {%s} fail: %s", yamlURL, err.Error())
 		return nil, err
 	}
 	defer resp.Body.Close()
 	yamlFile, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Printf("%s", err.Error())
+		log.Printf("Read Http response fail: %s", err.Error())
 		return nil, err
 	}
 
@@ -59,7 +59,7 @@ func CreateDeploymentFromYamlUrl(yamlURL string) (*v1beta1.Deployment, error) {
 
 	err = json.Unmarshal(jsonFile, &deployment)
 	if err != nil {
-		log.Printf("cannot unmarshal data: %s", err.Error())
+		log.Printf("json cannot unmarshal to deployment: %s", err.Error())
 		return nil, err
 	}
 
