@@ -229,17 +229,18 @@ func (n *SnapNode) Run(isOutsideCluster bool) {
 					log.Printf("[ SnapNode ] Insert Service Pod {%s}", e.Cur.Name)
 
 				case common.DELETE:
+					n.runningPodsMx.Lock()
 					if _, ok := n.RunningServicePods[e.Cur.Name]; ok {
-						n.runningPodsMx.Lock()
 						delete(n.RunningServicePods, e.Cur.Name)
-						n.runningPodsMx.Unlock()
-						if err := n.reconcileSnapState(); err != nil {
-							log.Printf("Unable to reconcile snap state: %s", err.Error())
-							return
-						}
 						log.Printf("[ SnapNode ] Delete Service Pod {%s}", e.Cur.Name)
 					} else {
-						log.Printf("Unable to find and delete service pod {%s} in running tasks!", e.Cur.Name)
+						log.Printf("[ SnapNode ] Unable to find and delete service pod {%s} in running tasks!", e.Cur.Name)
+					}
+					n.runningPodsMx.Unlock()
+
+					if err := n.reconcileSnapState(); err != nil {
+						log.Printf("Unable to reconcile snap state: %s", err.Error())
+						return
 					}
 				}
 			}

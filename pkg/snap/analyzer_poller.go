@@ -128,9 +128,10 @@ func (analyzerPoller *AnalyzerPoller) checkApplications(appResps []AppResponse) 
 }
 
 func (analyzerPoller *AnalyzerPoller) updateRunningServicePods(pods []*v1.Pod) {
+	snapNode := analyzerPoller.SnapController.SnapNode
+
 	//1. add Pod to RunningServicePods when pod is exist
 	for _, p := range pods {
-		snapNode := analyzerPoller.SnapController.SnapNode
 		container := p.Spec.Containers[0]
 		if _, ok := snapNode.RunningServicePods[p.Name]; !ok {
 			snapNode.runningPodsMx.Lock()
@@ -144,14 +145,14 @@ func (analyzerPoller *AnalyzerPoller) updateRunningServicePods(pods []*v1.Pod) {
 	}
 
 	//2. delete pod from RunningServicePods when the pod is not exist
-	for podName := range analyzerPoller.SnapController.SnapNode.RunningServicePods {
+	snapNode.runningPodsMx.Lock()
+	for podName := range snapNode.RunningServicePods {
 		if !containPod(pods, podName) {
-			analyzerPoller.SnapController.SnapNode.runningPodsMx.Lock()
-			delete(analyzerPoller.SnapController.SnapNode.RunningServicePods, podName)
-			analyzerPoller.SnapController.SnapNode.runningPodsMx.Unlock()
-			log.Printf("delete Running Service Pod {%s} in Node {%s} ", podName, analyzerPoller.SnapController.SnapNode.NodeId)
+			delete(snapNode.RunningServicePods, podName)
+			log.Printf("delete Running Service Pod {%s} in Node {%s} ", podName, snapNode.NodeId)
 		}
 	}
+	snapNode.runningPodsMx.Unlock()
 }
 
 // todo: lock!
