@@ -1,11 +1,11 @@
 package snap
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"time"
 
-	"encoding/json"
 	"github.com/hyperpilotio/hyperpilot-operator/pkg/common"
 	"github.com/spf13/viper"
 	"gopkg.in/resty.v1"
@@ -31,7 +31,7 @@ func (analyzerPoller *AnalyzerPoller) run() {
 	for {
 		select {
 		case <-tick:
-			analyzerURL := fmt.Sprintf("%analyzerPoller%analyzerPoller%analyzerPoller%d%analyzerPoller",
+			analyzerURL := fmt.Sprintf("%s%s%s%d%s",
 				"http://", analyzerPoller.config.GetString("SnapTaskController.Analyzer.Address"),
 				":", analyzerPoller.config.GetInt("SnapTaskController.Analyzer.Port"), API_APPS)
 			appResp := AppResponses{}
@@ -51,7 +51,7 @@ func (analyzerPoller *AnalyzerPoller) run() {
 }
 
 func (analyzerPoller *AnalyzerPoller) checkApplications(appResps []AppResponse) {
-	analyzerURL := fmt.Sprintf("%analyzerPoller%analyzerPoller%analyzerPoller%d%analyzerPoller",
+	analyzerURL := fmt.Sprintf("%s%s%s%d%s",
 		"http://", analyzerPoller.config.GetString("SnapTaskController.Analyzer.Address"),
 		":", analyzerPoller.config.GetInt("SnapTaskController.Analyzer.Port"), API_K8SSERVICES)
 
@@ -97,7 +97,7 @@ func (analyzerPoller *AnalyzerPoller) checkApplications(appResps []AppResponse) 
 				}
 				hash, err := analyzerPoller.SnapController.ClusterState.FindReplicaSetHash(deployResponse.Data.Name)
 				if err != nil {
-					log.Printf("[ SnapTaskController ] pod-template-hash is not found for deployment {%analyzerPoller}", deployResponse.Data.Name)
+					log.Printf("[ SnapTaskController ] pod-template-hash is not found for deployment {%s}", deployResponse.Data.Name)
 					continue
 				}
 				pods := analyzerPoller.SnapController.ClusterState.FindDeploymentPod(deployResponse.Data.Namespace, deployResponse.Data.Name, hash)
@@ -114,7 +114,7 @@ func (analyzerPoller *AnalyzerPoller) checkApplications(appResps []AppResponse) 
 				analyzerPoller.updateServiceList(statefulResponse.Data.Name)
 				analyzerPoller.updateRunningServicePods(pods)
 			default:
-				log.Printf("Not supported service kind {%analyzerPoller}", svcResp.Kind)
+				log.Printf("Not supported service kind {%s}", svcResp.Kind)
 			}
 		}
 	}
@@ -122,7 +122,7 @@ func (analyzerPoller *AnalyzerPoller) checkApplications(appResps []AppResponse) 
 }
 
 func (analyzerPoller *AnalyzerPoller) updateRunningServicePods(pods []*v1.Pod) {
-	//add
+	//1. add Pod to RunningServicePods when pod is exist
 	for _, p := range pods {
 		snapNode := analyzerPoller.SnapController.SnapNode
 		container := p.Spec.Containers[0]
@@ -133,17 +133,17 @@ func (analyzerPoller *AnalyzerPoller) updateRunningServicePods(pods []*v1.Pod) {
 				Port:      container.Ports[0].HostPort,
 			}
 			snapNode.runningPodsMx.Unlock()
-			log.Printf("add Running Service Pod {%analyzerPoller} in Node {%analyzerPoller}. ", p.Name, snapNode.NodeId)
+			log.Printf("add Running Service Pod {%s} in Node {%s}. ", p.Name, snapNode.NodeId)
 		}
 	}
 
-	//del
+	//2. delete pod from RunningServicePods when the pod is not exist
 	for podName := range analyzerPoller.SnapController.SnapNode.RunningServicePods {
 		if !containPod(pods, podName) {
 			analyzerPoller.SnapController.SnapNode.runningPodsMx.Lock()
 			delete(analyzerPoller.SnapController.SnapNode.RunningServicePods, podName)
 			analyzerPoller.SnapController.SnapNode.runningPodsMx.Unlock()
-			log.Printf("delete Running Service Pod {%analyzerPoller} in Node {%analyzerPoller} ", podName, analyzerPoller.SnapController.SnapNode.NodeId)
+			log.Printf("delete Running Service Pod {%s} in Node {%s} ", podName, analyzerPoller.SnapController.SnapNode.NodeId)
 		}
 	}
 }

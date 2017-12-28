@@ -349,7 +349,8 @@ func (s *SingleSnapController) Close() {
 	if err := deploymentsClient.Delete(HYPERPILOT_SNAP_DEPLOYMENT_NAME, &metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
 	}); err != nil {
-		panic(err)
+		log.Printf("[ SingleSnapController ] Delete deployment {%s} fail: %s", HYPERPILOT_SNAP_DEPLOYMENT_NAME, err.Error())
+		return
 	}
 	log.Printf("[ SingleSnapController ] Delete deployment {%s}", HYPERPILOT_SNAP_DEPLOYMENT_NAME)
 	//todo: wait until finish
