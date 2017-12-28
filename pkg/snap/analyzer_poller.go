@@ -73,13 +73,13 @@ func (analyzerPoller *AnalyzerPoller) checkApplications(appResps []AppResponse) 
 			serviceURL := analyzerURL + "/" + svc.ServiceID
 			resp, err := resty.R().Get(serviceURL)
 			if err != nil {
-				log.Print("http GET error: " + err.Error())
+				log.Printf("GET services of app {%s} from url {%s} error: %s", app.AppID, serviceURL, err.Error())
 				return
 			}
 
 			err = json.Unmarshal(resp.Body(), &svcResp)
 			if err != nil {
-				log.Print("JSON parse error: " + err.Error())
+				log.Printf("Unable unmarshal JSON response from {%s} to ServiceResponse: %s", serviceURL, err.Error())
 				return
 			}
 
@@ -88,7 +88,7 @@ func (analyzerPoller *AnalyzerPoller) checkApplications(appResps []AppResponse) 
 				deployResponse := K8sDeploymentResponse{}
 				err = json.Unmarshal(resp.Body(), &deployResponse)
 				if err != nil {
-					log.Print("JSON parse error: " + err.Error())
+					log.Printf("Unable unmarshal JSON to K8sDeploymentResponse: %s", err.Error())
 					return
 				}
 				hash, err := analyzerPoller.SnapController.ClusterState.FindReplicaSetHash(deployResponse.Data.Name)
@@ -103,7 +103,7 @@ func (analyzerPoller *AnalyzerPoller) checkApplications(appResps []AppResponse) 
 				statefulResponse := K8sStatefulSetResponse{}
 				err = json.Unmarshal(resp.Body(), &statefulResponse)
 				if err != nil {
-					log.Print("JSON parse error: " + err.Error())
+					log.Printf("Unable unmarshal JSON to K8sStatefulSetResponse: %s", err.Error())
 					return
 				}
 				pods := analyzerPoller.SnapController.ClusterState.FindStatefulSetPod(statefulResponse.Data.Namespace, statefulResponse.Data.Name)

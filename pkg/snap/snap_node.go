@@ -177,6 +177,7 @@ func (n *SnapNode) reconcileSnapState() error {
 			task := NewPrometheusCollectorTask(servicePodName, podInfo.Namespace, podInfo.Port, n.config)
 			_, err := n.TaskManager.CreateTask(task, n.config)
 			if err != nil {
+				log.Printf("[ SnapNode ] Create task in Node {%s} fail: %s", n.NodeId, err.Error())
 				return err
 			}
 			n.SnapTasks[servicePodName] = task.Name
@@ -189,11 +190,13 @@ func (n *SnapNode) reconcileSnapState() error {
 		if !ok {
 			taskId, err := getTaskIDFromTaskName(n.TaskManager, taskName)
 			if err != nil {
+				log.Printf("[ SnapNode ] Get id of task {%s} in Node {%s} fail when deleting: %s", taskName, n.NodeId, err.Error())
 				return err
 			}
 			err = n.TaskManager.StopAndRemoveTask(taskId)
 			if err != nil {
-				return nil
+				log.Printf("[ SnapNode ] Delete task {%s} in Node {%s} fail: %s", taskName, n.NodeId, err.Error())
+				return err
 			}
 			delete(n.SnapTasks, servicePodName)
 			log.Printf("[ SnapNode ] Delete task {%s} in Node {%s}", taskName, n.NodeId)

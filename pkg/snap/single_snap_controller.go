@@ -81,6 +81,7 @@ func (s *SingleSnapController) Init(clusterState *common.ClusterState) error {
 			if cond.Type == v1beta1.DeploymentAvailable && cond.Status == v1.ConditionTrue {
 				if err := s.createSnapNode(); err != nil {
 					log.Printf("[ SingleSnapController ] Create SnapNode fail: %s ", err.Error())
+					return err
 				}
 				log.Print("[ SingleSnapController ] Init() finished, create SnapNode")
 				return nil
