@@ -107,6 +107,9 @@ func ReadConfig(fileConfig string) (*viper.Viper, error) {
 	if addr := os.Getenv("HP_ANALYZERADDRESS"); addr != "" {
 		viper.Set("SnapTaskController.Analyzer.Address", addr)
 	}
+	if snapYamlUrl := os.Getenv("HP_SNAPYAMLURL"); snapYamlUrl != "" {
+		viper.Set("SnapTaskController.SnapDeploymentYamlURL", snapYamlUrl)
+	}
 	return viper, nil
 }
 
