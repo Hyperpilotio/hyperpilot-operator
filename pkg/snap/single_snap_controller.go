@@ -129,7 +129,7 @@ func (s *SingleSnapController) makeSnapDeploymentSpec() *v1beta1.DeploymentSpec 
 							"/usr/local/bin/run.sh",
 						},
 						Args: []string{
-							"https://s3.us-east-2.amazonaws.com/jimmy-hyperpilot/init-resource-worker.json",
+							"https://s3.us-east-2.amazonaws.com/jimmy-hyperpilot/init-snap-no-task.json",
 						},
 						ImagePullPolicy: v1.PullAlways,
 						Ports: []v1.ContainerPort{
