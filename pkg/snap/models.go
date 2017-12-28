@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	API_APPS        string = "/api/apps"
-	API_K8SSERVICES string = "/api/k8s_services"
+	apiApps        string = "/api/apps"
+	apiK8sServices string = "/api/k8s_services"
 )
 
 type ManagementFeature struct {

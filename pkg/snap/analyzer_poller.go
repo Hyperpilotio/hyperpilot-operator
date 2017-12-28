@@ -31,7 +31,7 @@ func (analyzerPoller *AnalyzerPoller) run() {
 	for {
 		select {
 		case <-tick:
-			analyzerURL := analyzerPoller.getEndpoint(API_APPS)
+			analyzerURL := analyzerPoller.getEndpoint(apiApps)
 			appResp := AppResponses{}
 			resp, err := resty.R().Get(analyzerURL)
 			if err != nil {
@@ -49,14 +49,14 @@ func (analyzerPoller *AnalyzerPoller) run() {
 }
 
 func (analyzerPoller *AnalyzerPoller) checkApplications(appResps []AppResponse) {
-	analyzerURL := analyzerPoller.getEndpoint(API_K8SSERVICES)
+	analyzerURL := analyzerPoller.getEndpoint(apiK8sServices)
 
 	svcResp := ServiceResponse{}
 	if !analyzerPoller.SnapController.SnapNode.TaskManager.isReady() {
 		log.Printf("SnapNodes are not ready")
 		return
 	}
-	if !analyzerPoller.isAppSetChange(appResps) {
+	if !analyzerPoller.isAppSetChanged(appResps) {
 		return
 	}
 	log.Printf("[ SnapTaskController ] Application Set change")
@@ -150,17 +150,17 @@ func (analyzerPoller *AnalyzerPoller) updateServiceList(deployName string) {
 	analyzerPoller.SnapController.ServiceList = append(analyzerPoller.SnapController.ServiceList, deployName)
 }
 
-func (analyzerPoller *AnalyzerPoller) isAppSetChange(appResps []AppResponse) bool {
-	app_set := common.NewStringSet()
+func (analyzerPoller *AnalyzerPoller) isAppSetChanged(appResps []AppResponse) bool {
+	appSet := common.NewStringSet()
 	for _, app := range appResps {
-		app_set.Add(app.AppID)
+		appSet.Add(app.AppID)
 	}
 
-	if app_set.IsIdentical(analyzerPoller.ApplicationSet) {
-		analyzerPoller.ApplicationSet = app_set
+	if appSet.IsIdentical(analyzerPoller.ApplicationSet) {
+		analyzerPoller.ApplicationSet = appSet
 		return false
 	} else {
-		analyzerPoller.ApplicationSet = app_set
+		analyzerPoller.ApplicationSet = appSet
 		return true
 	}
 }

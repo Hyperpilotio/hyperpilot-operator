@@ -16,8 +16,8 @@ import (
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
 )
 
-const HYPERPILOT_SNAP_NS = "hyperpilot"
-const HYPERPILOT_SNAP_DEPLOYMENT_NAME = "hyperpilot-snap"
+const hyperpilotSnapNamespace = "hyperpilot"
+const hyperpilotSnapDeploymentName = "hyperpilot-snap"
 
 type SingleSnapController struct {
 	ServiceList      []string
@@ -51,7 +51,7 @@ func (s *SingleSnapController) Init(clusterState *common.ClusterState) error {
 		log.Printf("[ SingleSnapController ] Create client failure")
 		return err
 	}
-	deployClient := kclient.ExtensionsV1beta1Client.Deployments(HYPERPILOT_SNAP_NS)
+	deployClient := kclient.ExtensionsV1beta1Client.Deployments(hyperpilotSnapNamespace)
 
 	// build snap spec
 	deployment, err := common.CreateDeploymentFromYamlUrl(s.config.GetString("SnapTaskController.SnapDeploymentYamlURL"))
@@ -59,8 +59,8 @@ func (s *SingleSnapController) Init(clusterState *common.ClusterState) error {
 		log.Printf("[ SingleSnapController ] Canot read YAML file from url: %s ", err.Error())
 		return err
 	}
-	deployment.Name = HYPERPILOT_SNAP_DEPLOYMENT_NAME
-	deployment.Namespace = HYPERPILOT_SNAP_NS
+	deployment.Name = hyperpilotSnapDeploymentName
+	deployment.Namespace = hyperpilotSnapNamespace
 
 	// create snap deployment
 	_, err = deployClient.Create(deployment)
@@ -100,7 +100,7 @@ func (s *SingleSnapController) Init(clusterState *common.ClusterState) error {
 }
 
 func (s *SingleSnapController) createSnapNode() error {
-	replicaClient := s.K8sClient.ExtensionsV1beta1Client.ReplicaSets(HYPERPILOT_SNAP_NS)
+	replicaClient := s.K8sClient.ExtensionsV1beta1Client.ReplicaSets(hyperpilotSnapNamespace)
 	replicaList, err := replicaClient.List(metav1.ListOptions{})
 	if err != nil {
 		log.Printf("[ SingleSnapController ] List replicaSet fail: %s", err.Error())
@@ -110,16 +110,16 @@ func (s *SingleSnapController) createSnapNode() error {
 	hash := ""
 	for _, replicaSet := range replicaList.Items {
 		for _, ref := range replicaSet.OwnerReferences {
-			if ref.Kind == "Deployment" && ref.Name == HYPERPILOT_SNAP_DEPLOYMENT_NAME {
+			if ref.Kind == "Deployment" && ref.Name == hyperpilotSnapDeploymentName {
 				hash = replicaSet.ObjectMeta.Labels["pod-template-hash"]
 			}
 		}
 	}
 	if hash == "" {
-		return errors.New(fmt.Sprintf("pod-template-hash label is not found for Deployment {%s}", HYPERPILOT_SNAP_DEPLOYMENT_NAME))
+		return errors.New(fmt.Sprintf("pod-template-hash label is not found for Deployment {%s}", hyperpilotSnapDeploymentName))
 	}
 
-	podClient := s.K8sClient.CoreV1Client.Pods(HYPERPILOT_SNAP_NS)
+	podClient := s.K8sClient.CoreV1Client.Pods(hyperpilotSnapNamespace)
 	pods, err := podClient.List(metav1.ListOptions{
 		LabelSelector: "pod-template-hash=" + hash,
 	})
@@ -185,7 +185,7 @@ func (s *SingleSnapController) ProcessPod(e *common.PodEvent) {
 }
 
 func isHyperPilotSnapPod(pod *v1.Pod) bool {
-	if strings.HasPrefix(pod.Name, HYPERPILOT_SNAP_DEPLOYMENT_NAME) {
+	if strings.HasPrefix(pod.Name, hyperpilotSnapDeploymentName) {
 		return true
 	}
 	return false
@@ -201,13 +201,13 @@ func (s *SingleSnapController) ProcessReplicaSet(e *common.ReplicaSetEvent) {}
 
 func (s *SingleSnapController) Close() {
 	deletePolicy := metav1.DeletePropagationForeground
-	deploymentsClient := s.K8sClient.ExtensionsV1beta1Client.Deployments(HYPERPILOT_SNAP_NS)
-	if err := deploymentsClient.Delete(HYPERPILOT_SNAP_DEPLOYMENT_NAME, &metav1.DeleteOptions{
+	deploymentsClient := s.K8sClient.ExtensionsV1beta1Client.Deployments(hyperpilotSnapNamespace)
+	if err := deploymentsClient.Delete(hyperpilotSnapDeploymentName, &metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
 	}); err != nil {
-		log.Printf("[ SingleSnapController ] Delete deployment {%s} fail: %s", HYPERPILOT_SNAP_DEPLOYMENT_NAME, err.Error())
+		log.Printf("[ SingleSnapController ] Delete deployment {%s} fail: %s", hyperpilotSnapDeploymentName, err.Error())
 		return
 	}
-	log.Printf("[ SingleSnapController ] Delete deployment {%s}", HYPERPILOT_SNAP_DEPLOYMENT_NAME)
+	log.Printf("[ SingleSnapController ] Delete deployment {%s}", hyperpilotSnapDeploymentName)
 	//todo: wait until finish
 }

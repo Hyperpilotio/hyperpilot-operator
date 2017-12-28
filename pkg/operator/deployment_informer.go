@@ -31,10 +31,10 @@ func InitDeploymentInformer(kclient *kubernetes.Clientset, processor EventProces
 	di.indexInformer = cache.NewSharedIndexInformer(
 		&cache.ListWatch{
 			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-				return kclient.ExtensionsV1beta1Client.Deployments(HYPERPILOT_OPERATOR_NS).List(options)
+				return kclient.ExtensionsV1beta1Client.Deployments(hyperpilotOperatorNamespace).List(options)
 			},
 			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-				return kclient.ExtensionsV1beta1Client.Deployments(HYPERPILOT_OPERATOR_NS).Watch(options)
+				return kclient.ExtensionsV1beta1Client.Deployments(hyperpilotOperatorNamespace).Watch(options)
 			},
 		},
 		&v1beta1.Deployment{},

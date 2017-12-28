@@ -146,7 +146,7 @@ func getServicePodNameFromSnapTask(taskName string) string {
 }
 
 func isSnapControllerTask(taskName string) bool {
-	if strings.HasPrefix(taskName, PROMETHEUS_TASK_NAME_PREFIX) {
+	if strings.HasPrefix(taskName, prometheusTaskNamePrefix) {
 		return true
 	}
 	return false
@@ -170,7 +170,7 @@ func (s *SnapTaskController) pollingAnalyzer() {
 		case <-tick:
 			analyzerURL := fmt.Sprintf("%s%s%s%d%s",
 				"http://", s.config.GetString("SnapTaskController.Analyzer.Address"),
-				":", s.config.GetInt("SnapTaskController.Analyzer.Port"), API_APPS)
+				":", s.config.GetInt("SnapTaskController.Analyzer.Port"), apiApps)
 			appResp := AppResponses{}
 			resp, err := resty.R().Get(analyzerURL)
 			if err != nil {
@@ -190,14 +190,14 @@ func (s *SnapTaskController) pollingAnalyzer() {
 func (s *SnapTaskController) checkApplications(appResps []AppResponse) {
 	analyzerURL := fmt.Sprintf("%s%s%s%d%s",
 		"http://", s.config.GetString("SnapTaskController.Analyzer.Address"),
-		":", s.config.GetInt("SnapTaskController.Analyzer.Port"), API_K8SSERVICES)
+		":", s.config.GetInt("SnapTaskController.Analyzer.Port"), apiK8sServices)
 
 	svcResp := ServiceResponse{}
 	if !s.isSnapNodeReady() {
 		log.Printf("SnapNodes are not ready")
 		return
 	}
-	if !s.isAppSetChange(appResps) {
+	if !s.isAppSetChanged(appResps) {
 		return
 	}
 	log.Printf("[ SnapTaskController ] Application Set change")
@@ -302,17 +302,17 @@ func containPod(pods []*v1.Pod, podName string) bool {
 	return false
 }
 
-func (s *SnapTaskController) isAppSetChange(appResps []AppResponse) bool {
-	app_set := common.NewStringSet()
+func (s *SnapTaskController) isAppSetChanged(appResps []AppResponse) bool {
+	appSet := common.NewStringSet()
 	for _, app := range appResps {
-		app_set.Add(app.AppID)
+		appSet.Add(app.AppID)
 	}
 
-	if app_set.IsIdentical(s.ApplicationSet) {
-		s.ApplicationSet = app_set
+	if appSet.IsIdentical(s.ApplicationSet) {
+		s.ApplicationSet = appSet
 		return false
 	} else {
-		s.ApplicationSet = app_set
+		s.ApplicationSet = appSet
 		return true
 	}
 }

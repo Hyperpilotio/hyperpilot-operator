@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	SNAP_VERSION                = "v1"
-	PROMETHEUS_TASK_NAME_PREFIX = "PROMETHEUS"
+	snapVersion              = "v1"
+	prometheusTaskNamePrefix = "PROMETHEUS"
 )
 
 type Plugin struct {
@@ -42,7 +42,7 @@ type Task struct {
 
 func NewTaskManager(podIP string, config *viper.Viper) (*TaskManager, error) {
 	url := "http://" + podIP + ":8181"
-	snapClient, err := client.New(url, SNAP_VERSION, true)
+	snapClient, err := client.New(url, snapVersion, true)
 	if err != nil {
 		return nil, errors.New("Unable to create snap client: " + err.Error())
 	}
@@ -69,7 +69,7 @@ func NewPrometheusCollectorTask(podName string, namespace string, port int32, co
 
 	return &Task{
 		// e.g. PROMETHEUS-resource-worker-spark-9br5d
-		Name:        PROMETHEUS_TASK_NAME_PREFIX + "-" + podName,
+		Name:        prometheusTaskNamePrefix + "-" + podName,
 		WorkflowMap: NewPrometheusCollectorWorkflowMap(podName, namespace, port, config),
 		Opts:        runOpts,
 	}

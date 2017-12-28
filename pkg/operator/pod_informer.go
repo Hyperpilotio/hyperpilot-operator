@@ -33,10 +33,10 @@ func InitPodInformer(kclient *kubernetes.Clientset, processor EventProcessor) *P
 		&cache.ListWatch{
 			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
 				//return kclient.CoreV1().Pods(opts["namespace"]).List(options)
-				return kclient.CoreV1().Pods(HYPERPILOT_OPERATOR_NS).List(options)
+				return kclient.CoreV1().Pods(hyperpilotOperatorNamespace).List(options)
 			},
 			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-				return kclient.CoreV1().Pods(HYPERPILOT_OPERATOR_NS).Watch(options)
+				return kclient.CoreV1().Pods(hyperpilotOperatorNamespace).Watch(options)
 			},
 		},
 		&v1.Pod{},
