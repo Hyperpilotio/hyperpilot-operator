@@ -259,31 +259,20 @@ func (s *SnapTaskController) checkApplications(appResps []AppResponse) {
 }
 
 func (s *SnapTaskController) updateRunningServicePods(pods []*v1.Pod) {
-	//add
 	for _, p := range pods {
 		snapNode := s.Nodes[p.Spec.NodeName]
 		container := p.Spec.Containers[0]
-		if _, ok := snapNode.RunningServicePods[p.Name]; !ok {
-			snapNode.runningPodsMx.Lock()
-			snapNode.RunningServicePods[p.Name] = ServicePodInfo{
+		if ok := snapNode.RunningServicePods.find(p.Name); !ok {
+			snapNode.RunningServicePods.addPodInfo(p.Name, ServicePodInfo{
 				Namespace: p.Namespace,
 				Port:      container.Ports[0].HostPort,
-			}
-			snapNode.runningPodsMx.Unlock()
+			})
 			log.Printf("add Running Service Pod {%s} in Node {%s}. ", p.Name, snapNode.NodeId)
 		}
 	}
 
-	//del
 	for _, snapNode := range s.Nodes {
-		for podName := range snapNode.RunningServicePods {
-			if !containPod(pods, podName) {
-				snapNode.runningPodsMx.Lock()
-				delete(snapNode.RunningServicePods, podName)
-				snapNode.runningPodsMx.Unlock()
-				log.Printf("delete Running Service Pod {%s} in Node {%s} ", podName, snapNode.NodeId)
-			}
-		}
+		snapNode.RunningServicePods.deletePodInfoIfNotPresentInList(pods)
 	}
 }
 
@@ -291,15 +280,6 @@ func (s *SnapTaskController) updateRunningServicePods(pods []*v1.Pod) {
 // todo: check overwrite by analyzer result
 func (s *SnapTaskController) updateServiceList(deployName string) {
 	s.ServiceList = append(s.ServiceList, deployName)
-}
-
-func containPod(pods []*v1.Pod, podName string) bool {
-	for _, pod := range pods {
-		if podName == pod.Name {
-			return true
-		}
-	}
-	return false
 }
 
 func (s *SnapTaskController) isAppSetChanged(appResps []AppResponse) bool {

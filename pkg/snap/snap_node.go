@@ -15,14 +15,151 @@ type ServicePodInfo struct {
 	Port      int32
 }
 
+type RunningServiceList struct {
+	Lock               *sync.Mutex
+	RunningServicePods map[string]ServicePodInfo
+	SnapNode           *SnapNode
+}
+
+func NewRunningServiceList(node *SnapNode) *RunningServiceList {
+	return &RunningServiceList{
+		Lock:               &sync.Mutex{},
+		RunningServicePods: make(map[string]ServicePodInfo),
+		SnapNode:           node,
+	}
+}
+
+func (runningService *RunningServiceList) reconcile() error {
+	runningService.Lock.Lock()
+	defer runningService.Lock.Unlock()
+
+	for servicePodName, podInfo := range runningService.RunningServicePods {
+		if err := runningService.SnapNode.SnapTasks.createTask(servicePodName, podInfo); err != nil {
+			log.Printf("[ RunningServiceList ] Create task fail when snap task for {%s} is not exist: %s", servicePodName, err.Error())
+			return err
+		}
+	}
+	return nil
+}
+
+func (runningService *RunningServiceList) find(servicePodName string) bool {
+	runningService.Lock.Lock()
+	defer runningService.Lock.Unlock()
+	_, ok := runningService.RunningServicePods[servicePodName]
+	return ok
+}
+
+func (runningService *RunningServiceList) addPodInfo(name string, podInfo ServicePodInfo) {
+	runningService.Lock.Lock()
+	defer runningService.Lock.Unlock()
+	runningService.RunningServicePods[name] = podInfo
+	log.Printf("[ RunningServiceList ] Add Service Pod {%s}", name)
+}
+
+func (runningService *RunningServiceList) delPodInfo(name string) {
+	runningService.Lock.Lock()
+	defer runningService.Lock.Unlock()
+
+	if _, ok := runningService.RunningServicePods[name]; ok {
+		delete(runningService.RunningServicePods, name)
+		log.Printf("[ RunningServiceList ] Delete Service Pod {%s}", name)
+	} else {
+		log.Printf("[ RunningServiceList ] Unable to find and delete service pod {%s} in running tasks!", name)
+	}
+}
+
+func (runningService *RunningServiceList) deletePodInfoIfNotPresentInList(podList []*v1.Pod) {
+	runningService.Lock.Lock()
+	defer runningService.Lock.Unlock()
+
+	for podName := range runningService.RunningServicePods {
+		if !containPod(podList, podName) {
+			delete(runningService.RunningServicePods, podName)
+			log.Printf("[ RunningServiceList ] Delete Running Service Pod {%s} in Node {%s} ", podName, runningService.SnapNode.NodeId)
+		}
+	}
+}
+
+func containPod(pods []*v1.Pod, podName string) bool {
+	for _, pod := range pods {
+		if podName == pod.Name {
+			return true
+		}
+	}
+	return false
+}
+
+type SnapTaskList struct {
+	Lock      *sync.Mutex
+	SnapTasks map[string]string
+	SnapNode  *SnapNode
+}
+
+func NewSnapTaskList(node *SnapNode) *SnapTaskList {
+	return &SnapTaskList{
+		Lock:      &sync.Mutex{},
+		SnapTasks: make(map[string]string),
+		SnapNode:  node,
+	}
+}
+
+func (snapTask *SnapTaskList) createTask(servicePodName string, podInfo ServicePodInfo) error {
+	snapTask.Lock.Lock()
+	defer snapTask.Lock.Unlock()
+
+	n := snapTask.SnapNode
+	_, ok := snapTask.SnapTasks[servicePodName]
+	if !ok {
+		task := NewPrometheusCollectorTask(servicePodName, podInfo.Namespace, podInfo.Port, n.config)
+		_, err := n.TaskManager.CreateTask(task, n.config)
+		if err != nil {
+			log.Printf("[ SnapTaskList ] Create task in Node {%s} fail: %s", n.NodeId, err.Error())
+			return err
+		}
+		snapTask.SnapTasks[servicePodName] = task.Name
+		log.Printf("[ SnapTaskList ] Create task {%s} in Node {%s}", task.Name, n.NodeId)
+	}
+
+	return nil
+}
+
+func (snapTask *SnapTaskList) addTaskName(servicePodName, taskName string) {
+	snapTask.Lock.Lock()
+	defer snapTask.Lock.Unlock()
+	snapTask.SnapTasks[servicePodName] = taskName
+}
+
+func (snapTask *SnapTaskList) reconcile() error {
+	snapTask.Lock.Lock()
+	defer snapTask.Lock.Unlock()
+	n := snapTask.SnapNode
+
+	for servicePodName, taskName := range snapTask.SnapTasks {
+		ok := n.RunningServicePods.find(servicePodName)
+		if !ok {
+			taskId, err := getTaskIDFromTaskName(n.TaskManager, taskName)
+			if err != nil {
+				log.Printf("[ SnapTaskList ] Get id of task {%s} in Node {%s} fail when deleting: %s", taskName, n.NodeId, err.Error())
+				return err
+			}
+			err = n.TaskManager.StopAndRemoveTask(taskId)
+			if err != nil {
+				log.Printf("[ SnapTaskList ] Delete task {%s} in Node {%s} fail: %s", taskName, n.NodeId, err.Error())
+				return err
+			}
+			delete(snapTask.SnapTasks, servicePodName)
+			log.Printf("[ SnapTaskList ] Delete task {%s} in Node {%s}", taskName, n.NodeId)
+		}
+	}
+	return nil
+}
+
 type SnapNode struct {
 	NodeId             string
 	ExternalIP         string
 	TaskManager        *TaskManager
-	snapTaskMx         *sync.Mutex
-	SnapTasks          map[string]string
-	runningPodsMx      *sync.Mutex
-	RunningServicePods map[string]ServicePodInfo
+	SnapTasks          *SnapTaskList
+	RunningServicePods *RunningServiceList
 	PodEvents          chan *common.PodEvent
 	ExitChan           chan bool
 	ServiceList        *[]string
@@ -30,19 +167,20 @@ type SnapNode struct {
 }
 
 func NewSnapNode(nodeName string, externalIp string, serviceList *[]string, config *viper.Viper) *SnapNode {
-	return &SnapNode{
-		NodeId:             nodeName,
-		ExternalIP:         externalIp,
-		runningPodsMx:      &sync.Mutex{},
-		RunningServicePods: make(map[string]ServicePodInfo),
-		snapTaskMx:         &sync.Mutex{},
-		SnapTasks:          make(map[string]string),
-		TaskManager:        nil,
-		PodEvents:          make(chan *common.PodEvent, 1000),
-		ExitChan:           make(chan bool, 1),
-		ServiceList:        serviceList,
-		config:             config,
+	snapNode := &SnapNode{
+		NodeId:      nodeName,
+		ExternalIP:  externalIp,
+		TaskManager: nil,
+		PodEvents:   make(chan *common.PodEvent, 1000),
+		ExitChan:    make(chan bool, 1),
+		ServiceList: serviceList,
+		config:      config,
 	}
+	runningServices := NewRunningServiceList(snapNode)
+	snapTasks := NewSnapTaskList(snapNode)
+	snapNode.RunningServicePods = runningServices
+	snapNode.SnapTasks = snapTasks
+	return snapNode
 }
 
 func (n *SnapNode) init(isOutsideCluster bool, clusterState *common.ClusterState) (bool, error) {
@@ -89,7 +227,7 @@ func (n *SnapNode) initSingleSnap(isOutsideCluster bool, snapPod *v1.Pod, cluste
 	for _, task := range tasks.ScheduledTasks {
 		if isSnapControllerTask(task.Name) {
 			servicePodName := getServicePodNameFromSnapTask(task.Name)
-			n.SnapTasks[servicePodName] = task.Name
+			n.SnapTasks.addTaskName(servicePodName, task.Name)
 		}
 	}
 
@@ -99,10 +237,10 @@ func (n *SnapNode) initSingleSnap(isOutsideCluster bool, snapPod *v1.Pod, cluste
 			// TODO: How do we know which container has the right port? and which port?
 			container := p.Spec.Containers[0]
 			if len(container.Ports) > 0 {
-				n.RunningServicePods[p.Name] = ServicePodInfo{
+				n.RunningServicePods.addPodInfo(p.Name, ServicePodInfo{
 					Namespace: p.Namespace,
 					Port:      container.Ports[0].HostPort,
-				}
+				})
 			}
 		}
 	}
@@ -141,7 +279,7 @@ func (n *SnapNode) initSnap(isOutsideCluster bool, snapPod *v1.Pod, clusterState
 	for _, task := range tasks.ScheduledTasks {
 		if isSnapControllerTask(task.Name) {
 			servicePodName := getServicePodNameFromSnapTask(task.Name)
-			n.SnapTasks[servicePodName] = task.Name
+			n.SnapTasks.addTaskName(servicePodName, task.Name)
 		}
 	}
 
@@ -151,10 +289,10 @@ func (n *SnapNode) initSnap(isOutsideCluster bool, snapPod *v1.Pod, clusterState
 			// TODO: How do we know which container has the right port? and which port?
 			container := p.Spec.Containers[0]
 			if len(container.Ports) > 0 {
-				n.RunningServicePods[p.Name] = ServicePodInfo{
+				n.RunningServicePods.addPodInfo(p.Name, ServicePodInfo{
 					Namespace: p.Namespace,
 					Port:      container.Ports[0].HostPort,
-				}
+				})
 			}
 		}
 	}
@@ -166,41 +304,15 @@ func (n *SnapNode) initSnap(isOutsideCluster bool, snapPod *v1.Pod, clusterState
 }
 
 func (n *SnapNode) reconcileSnapState() error {
-	n.runningPodsMx.Lock()
-	defer n.runningPodsMx.Unlock()
-	n.snapTaskMx.Lock()
-	defer n.snapTaskMx.Unlock()
-
-	for servicePodName, podInfo := range n.RunningServicePods {
-		_, ok := n.SnapTasks[servicePodName]
-		if !ok {
-			task := NewPrometheusCollectorTask(servicePodName, podInfo.Namespace, podInfo.Port, n.config)
-			_, err := n.TaskManager.CreateTask(task, n.config)
-			if err != nil {
-				log.Printf("[ SnapNode ] Create task in Node {%s} fail: %s", n.NodeId, err.Error())
-				return err
-			}
-			n.SnapTasks[servicePodName] = task.Name
-			log.Printf("[ SnapNode ] Create task {%s} in Node {%s}", task.Name, n.NodeId)
-		}
+	// create snap task for existing running service
+	if err := n.RunningServicePods.reconcile(); err != nil {
+		log.Printf("[ SnapNode ] reconcileSnapState fail when check running service to create task : %s", err.Error())
+		return err
 	}
-
-	for servicePodName, taskName := range n.SnapTasks {
-		_, ok := n.RunningServicePods[servicePodName]
-		if !ok {
-			taskId, err := getTaskIDFromTaskName(n.TaskManager, taskName)
-			if err != nil {
-				log.Printf("[ SnapNode ] Get id of task {%s} in Node {%s} fail when deleting: %s", taskName, n.NodeId, err.Error())
-				return err
-			}
-			err = n.TaskManager.StopAndRemoveTask(taskId)
-			if err != nil {
-				log.Printf("[ SnapNode ] Delete task {%s} in Node {%s} fail: %s", taskName, n.NodeId, err.Error())
-				return err
-			}
-			delete(n.SnapTasks, servicePodName)
-			log.Printf("[ SnapNode ] Delete task {%s} in Node {%s}", taskName, n.NodeId)
-		}
+	// remove snap task for non-existing running service
+	if err := n.SnapTasks.reconcile(); err != nil {
+		log.Printf("[ SnapNode ] reconcileSnapState fail when check SnapTask list to remove task : %s", err.Error())
+		return err
 	}
 	return nil
 }
@@ -216,30 +328,20 @@ func (n *SnapNode) Run(isOutsideCluster bool) {
 				switch e.EventType {
 				case common.ADD, common.UPDATE:
 					container := e.Cur.Spec.Containers[0]
-					n.runningPodsMx.Lock()
-					n.RunningServicePods[e.Cur.Name] = ServicePodInfo{
+					n.RunningServicePods.addPodInfo(e.Cur.Name, ServicePodInfo{
 						Namespace: e.Cur.Namespace,
 						Port:      container.Ports[0].HostPort,
-					}
-					n.runningPodsMx.Unlock()
+					})
 					if err := n.reconcileSnapState(); err != nil {
-						log.Printf("Unable to reconcile snap state: %s", err.Error())
+						log.Printf("[ SnapNode ] Unable to reconcile snap state: %s", err.Error())
 						return
 					}
 					log.Printf("[ SnapNode ] Insert Service Pod {%s}", e.Cur.Name)
 
 				case common.DELETE:
-					n.runningPodsMx.Lock()
-					if _, ok := n.RunningServicePods[e.Cur.Name]; ok {
-						delete(n.RunningServicePods, e.Cur.Name)
-						log.Printf("[ SnapNode ] Delete Service Pod {%s}", e.Cur.Name)
-					} else {
-						log.Printf("[ SnapNode ] Unable to find and delete service pod {%s} in running tasks!", e.Cur.Name)
-					}
-					n.runningPodsMx.Unlock()
-
+					n.RunningServicePods.delPodInfo(e.Cur.Name)
 					if err := n.reconcileSnapState(); err != nil {
-						log.Printf("Unable to reconcile snap state: %s", err.Error())
+						log.Printf("[ SnapNode ] Unable to reconcile snap state: %s", err.Error())
 						return
 					}
 				}

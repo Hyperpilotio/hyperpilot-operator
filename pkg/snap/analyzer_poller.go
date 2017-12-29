@@ -133,26 +133,18 @@ func (analyzerPoller *AnalyzerPoller) updateRunningServicePods(pods []*v1.Pod) {
 	//1. add Pod to RunningServicePods when pod is exist
 	for _, p := range pods {
 		container := p.Spec.Containers[0]
-		if _, ok := snapNode.RunningServicePods[p.Name]; !ok {
-			snapNode.runningPodsMx.Lock()
-			snapNode.RunningServicePods[p.Name] = ServicePodInfo{
+
+		if ok := snapNode.RunningServicePods.find(p.Name); !ok {
+			snapNode.RunningServicePods.addPodInfo(p.Name, ServicePodInfo{
 				Namespace: p.Namespace,
 				Port:      container.Ports[0].HostPort,
-			}
-			snapNode.runningPodsMx.Unlock()
+			})
 			log.Printf("add Running Service Pod {%s} in Node {%s}. ", p.Name, snapNode.NodeId)
 		}
 	}
 
 	//2. delete pod from RunningServicePods when the pod is not exist
-	snapNode.runningPodsMx.Lock()
-	for podName := range snapNode.RunningServicePods {
-		if !containPod(pods, podName) {
-			delete(snapNode.RunningServicePods, podName)
-			log.Printf("delete Running Service Pod {%s} in Node {%s} ", podName, snapNode.NodeId)
-		}
-	}
-	snapNode.runningPodsMx.Unlock()
+	snapNode.RunningServicePods.deletePodInfoIfNotPresentInList(pods)
 }
 
 // todo: lock!
