@@ -29,10 +29,22 @@
   Overwrite SnapTaskController.Analyzer.Enable
   
   `usage: HP_POLLANALYZERENABLE=true|false`
+  
+* HP_ANALYZERADDRESS
+
+  Overwrite SnapTaskController.Analyzer.Address
+  
+  `usage: HP_ANALYZERADDRESS=127.0.0.1`
+
+* HP_SNAPYAMLURL
+
+  Overwrite SnapTaskController.SnapDeploymentYamlURL
+  
+  `usage: HP_SNAPYAMLURL=https://s3.us-east-2.amazonaws.com/jimmy-hyperpilot/snap-deployment-sample.yaml`
 
 
 * HP_CONTROLLERS
 
   Overwrite Operator.LoadedControllers
 
-  `usage: HP_CONTROLLERS=SnapTaskController,NodeSpecController`
+  `usage: HP_CONTROLLERS=SingleSnapController,NodeSpecController,SnapTaskController`

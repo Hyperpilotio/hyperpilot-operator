@@ -3,14 +3,15 @@
     "OutsideCluster": false,
     "LoadedControllers": [
       "NodeSpecController",
-      "SnapTaskController"
+      "SingleSnapController"
     ]
   },
   "APIServer": {
     "Port": "8080",
-    "Debug": true
+    "Debug": false
   },
   "SnapTaskController": {
+    "SnapDeploymentYamlURL": "https://s3.us-east-2.amazonaws.com/jimmy-hyperpilot/snap-deployment-sample.yaml",
     "PluginsList": [
       {
         "Name": "snap-plugin-collector-prometheus",

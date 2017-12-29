@@ -31,10 +31,10 @@ func InitDaemonSetInformer(kclient *kubernetes.Clientset, processor EventProcess
 	daemonsetInformer := cache.NewSharedIndexInformer(
 		&cache.ListWatch{
 			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-				return kclient.ExtensionsV1beta1Client.DaemonSets(HYPERPILOT_OPERATOR_NS).List(options)
+				return kclient.ExtensionsV1beta1Client.DaemonSets(hyperpilotOperatorNamespace).List(options)
 			},
 			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-				return kclient.ExtensionsV1beta1Client.DaemonSets(HYPERPILOT_OPERATOR_NS).Watch(options)
+				return kclient.ExtensionsV1beta1Client.DaemonSets(hyperpilotOperatorNamespace).Watch(options)
 			},
 		},
 		&v1beta1.DaemonSet{},

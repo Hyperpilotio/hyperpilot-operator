@@ -33,10 +33,10 @@ func InitReplicaSetInformer(kclient *kubernetes.Clientset, processor EventProces
 		&cache.ListWatch{
 			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
 				//return kclient.CoreV1().Pods(opts["namespace"]).List(options)
-				return kclient.ExtensionsV1beta1Client.ReplicaSets(HYPERPILOT_OPERATOR_NS).List(options)
+				return kclient.ExtensionsV1beta1Client.ReplicaSets(hyperpilotOperatorNamespace).List(options)
 			},
 			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-				return kclient.ExtensionsV1beta1Client.ReplicaSets(HYPERPILOT_OPERATOR_NS).Watch(options)
+				return kclient.ExtensionsV1beta1Client.ReplicaSets(hyperpilotOperatorNamespace).Watch(options)
 			},
 		},
 		&v1beta1.ReplicaSet{},

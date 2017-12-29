@@ -1,11 +1,17 @@
 package common
 
 import (
+	"encoding/json"
+	"io/ioutil"
+	"log"
+	"net/http"
 	"os"
-
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/clientcmd"
 	"path/filepath"
+
+	"github.com/ghodss/yaml"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 func NewK8sClient(runOutsideCluster bool) (*kubernetes.Clientset, error) {
@@ -28,4 +34,34 @@ func NewK8sClient(runOutsideCluster bool) (*kubernetes.Clientset, error) {
 	}
 
 	return kubernetes.NewForConfig(config)
+}
+
+func CreateDeploymentFromYamlUrl(yamlURL string) (*v1beta1.Deployment, error) {
+	resp, err := http.Get(yamlURL)
+	if err != nil {
+		log.Printf("Http Get from URL {%s} fail: %s", yamlURL, err.Error())
+		return nil, err
+	}
+	defer resp.Body.Close()
+	yamlFile, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("Read Http response fail: %s", err.Error())
+		return nil, err
+	}
+
+	var deployment v1beta1.Deployment
+
+	jsonFile, err := yaml.YAMLToJSON(yamlFile)
+	if err != nil {
+		log.Printf("YAML cannot converted to JSON: %s", err.Error())
+		return nil, err
+	}
+
+	err = json.Unmarshal(jsonFile, &deployment)
+	if err != nil {
+		log.Printf("json cannot unmarshal to deployment: %s", err.Error())
+		return nil, err
+	}
+
+	return &deployment, nil
 }

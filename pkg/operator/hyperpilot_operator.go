@@ -12,13 +12,13 @@ import (
 )
 
 const (
-	HYPERPILOT_OPERATOR_NS = common.HYPERPILOT_OPERATOR_NS
+	hyperpilotOperatorNamespace = common.HyperpilotOperatorNamespace
 
 	// Operator states
-	OPERATOR_NOT_RUNNING              = -1
-	OPERATOR_INITIALIZING             = 0
-	OPERATOR_INITIALIZING_CONTROLLERS = 1
-	OPERATOR_RUNNING                  = 2
+	operatorNotRunning              = -1
+	operatorInitializing            = 0
+	operatorInitializingControllers = 1
+	operatorRunning                 = 2
 )
 
 type EventProcessor interface {
@@ -118,7 +118,7 @@ func NewHyperpilotOperator(kclient *kubernetes.Clientset, controllers []EventPro
 		controllers:        baseControllers,
 		kclient:            kclient,
 		clusterState:       common.NewClusterState(),
-		state:              OPERATOR_NOT_RUNNING,
+		state:              operatorNotRunning,
 		config:             config,
 	}
 
@@ -157,7 +157,7 @@ func (c *HyperpilotOperator) ProcessReplicaSet(e *common.ReplicaSetEvent) {
 // Run starts the process for listening for pod changes and acting upon those changes.
 func (c *HyperpilotOperator) Run(stopCh <-chan struct{}) error {
 	// Lifecycle:
-	c.state = OPERATOR_INITIALIZING
+	c.state = operatorInitializing
 
 	// 1. Register informers
 	c.podInformer = InitPodInformer(c.kclient, c)
@@ -186,7 +186,7 @@ func (c *HyperpilotOperator) Run(stopCh <-chan struct{}) error {
 	}
 
 	// 3. Initialize controllers
-	c.state = OPERATOR_INITIALIZING_CONTROLLERS
+	c.state = operatorInitializingControllers
 
 	controllerWg := &sync.WaitGroup{}
 	for _, controller := range c.controllers {
@@ -199,7 +199,7 @@ func (c *HyperpilotOperator) Run(stopCh <-chan struct{}) error {
 	// Use wait group to wait for all controller init to finish
 
 	// 3. Forward events to controllers
-	c.state = OPERATOR_RUNNING
+	c.state = operatorRunning
 
 	c.podInformer.onOperatorReady()
 	c.nodeInformer.onOperatorReady()
@@ -263,4 +263,10 @@ func (c *HyperpilotOperator) InitApiServer() error {
 		return err
 	}
 	return nil
+}
+
+func (c *HyperpilotOperator) Close() {
+	for _, controller := range c.controllers {
+		controller.Close()
+	}
 }

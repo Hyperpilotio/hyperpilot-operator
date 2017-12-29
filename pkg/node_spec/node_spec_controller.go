@@ -267,3 +267,5 @@ func (s *NodeSpecController) String() string {
 func (s *NodeSpecController) isOutsideCluster() bool {
 	return s.config.GetBool("Operator.OutsideCluster")
 }
+
+func (s *NodeSpecController) Close() {}

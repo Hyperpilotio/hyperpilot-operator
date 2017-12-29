@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/hyperpilotio/hyperpilot-operator/pkg/common"
@@ -12,7 +13,6 @@ import (
 	"github.com/hyperpilotio/hyperpilot-operator/pkg/operator"
 	hsnap "github.com/hyperpilotio/hyperpilot-operator/pkg/snap"
 	"github.com/spf13/viper"
-	"strings"
 )
 
 func main() {
@@ -58,6 +58,7 @@ func main() {
 
 	// Wait for signal or error from operator
 	<-sigs
+	hpc.Close()
 
 	// Signal all goroutines in operator to exit
 	close(stop)
@@ -103,6 +104,12 @@ func ReadConfig(fileConfig string) (*viper.Viper, error) {
 	} else if os.Getenv("HP_POLLANALYZERENABLE") == "true" {
 		viper.Set("SnapTaskController.Analyzer.Enable", true)
 	}
+	if addr := os.Getenv("HP_ANALYZERADDRESS"); addr != "" {
+		viper.Set("SnapTaskController.Analyzer.Address", addr)
+	}
+	if snapYamlUrl := os.Getenv("HP_SNAPYAMLURL"); snapYamlUrl != "" {
+		viper.Set("SnapTaskController.SnapDeploymentYamlURL", snapYamlUrl)
+	}
 	return viper, nil
 }
 
@@ -119,6 +126,11 @@ func loadControllers(config *viper.Viper) []operator.EventProcessor {
 	if controllerSet.IsExist("SnapTaskController") {
 		controllers = append(controllers, hsnap.NewSnapTaskController(config))
 		log.Printf("[ main ] %s is Loaded", "SnapTaskController")
+	}
+
+	if controllerSet.IsExist("SingleSnapController") {
+		controllers = append(controllers, hsnap.NewSingleSnapController(config))
+		log.Printf("[ main ] %s is Loaded", "SingleSnapController")
 	}
 
 	if controllerSet.IsExist("NodeSpecController") {

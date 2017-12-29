@@ -13,7 +13,7 @@ import (
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
 )
 
-const HYPERPILOT_OPERATOR_NS = ""
+const HyperpilotOperatorNamespace = ""
 
 type NodeInfo struct {
 	NodeName   string
@@ -114,7 +114,7 @@ func (clusterState *ClusterState) PopulateNodeInfo(kclient *kubernetes.Clientset
 }
 
 func (clusterState *ClusterState) PopulatePods(kclient *kubernetes.Clientset) error {
-	pods, err := kclient.Pods(HYPERPILOT_OPERATOR_NS).List(metav1.ListOptions{})
+	pods, err := kclient.Pods(HyperpilotOperatorNamespace).List(metav1.ListOptions{})
 	if err != nil {
 		return err
 	}
@@ -131,7 +131,7 @@ func (clusterState *ClusterState) PopulatePods(kclient *kubernetes.Clientset) er
 }
 
 func (clusterState *ClusterState) PopulateReplicaSet(kclient *kubernetes.Clientset) error {
-	rss, err := kclient.ReplicaSets(HYPERPILOT_OPERATOR_NS).List(metav1.ListOptions{})
+	rss, err := kclient.ReplicaSets(HyperpilotOperatorNamespace).List(metav1.ListOptions{})
 	if err != nil {
 		return err
 	}
