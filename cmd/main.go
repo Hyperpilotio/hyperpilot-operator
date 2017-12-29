@@ -51,7 +51,7 @@ func main() {
 	go func() {
 		err := hpc.Run(stop)
 		if err != nil {
-			log.Printf("Operator failed to run: " + err.Error())
+			log.Printf("[ main ] Operator failed to run: " + err.Error())
 			close(sigs)
 		}
 	}()
@@ -125,17 +125,17 @@ func loadControllers(config *viper.Viper) []operator.EventProcessor {
 
 	if controllerSet.IsExist("SnapTaskController") {
 		controllers = append(controllers, hsnap.NewSnapTaskController(config))
-		log.Printf("[ main ] %s is Loaded", "SnapTaskController")
+		log.Printf("[ main ] %s is configured to load", "SnapTaskController")
 	}
 
 	if controllerSet.IsExist("SingleSnapController") {
 		controllers = append(controllers, hsnap.NewSingleSnapController(config))
-		log.Printf("[ main ] %s is Loaded", "SingleSnapController")
+		log.Printf("[ main ] %s is configured to load", "SingleSnapController")
 	}
 
 	if controllerSet.IsExist("NodeSpecController") {
 		controllers = append(controllers, node_spec.NewNodeSpecController(config))
-		log.Printf("[ main ] %s is Loaded", "NodeSpecController")
+		log.Printf("[ main ] %s is configured to load", "NodeSpecController")
 	}
 	return controllers
 }
