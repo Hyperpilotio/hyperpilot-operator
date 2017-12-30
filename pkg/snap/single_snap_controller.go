@@ -73,27 +73,32 @@ func (s *SingleSnapController) Init(clusterState *common.ClusterState) error {
 	for {
 		d, err := deployClient.Get(deployment.Name, metav1.GetOptions{})
 		if err != nil {
-			log.Printf("[ SingleSnapController ] Check Snap Deployment status fail: %s ", err.Error())
+			log.Printf("[ SingleSnapController ] Get deployment {%s} status fail: %s ", deployment.Name, err.Error())
 			return err
 		}
 
+		var isAvailable v1.ConditionStatus
 		for _, cond := range d.Status.Conditions {
-			if cond.Type == v1beta1.DeploymentAvailable && cond.Status == v1.ConditionTrue {
-				log.Printf("[ SingleSnapController ] Deployment {%s} is ready, create SnapNode", hyperpilotSnapDeploymentName)
-				if err := s.createSnapNode(); err != nil {
-					log.Printf("[ SingleSnapController ] Create SnapNode fail: %s ", err.Error())
-					return err
-				}
-				log.Print("[ SingleSnapController ] Init() finished, create SnapNode")
-				return nil
+			if cond.Type == v1beta1.DeploymentAvailable {
+				isAvailable = cond.Status
 			}
 		}
-		log.Printf("[ SingleSnapController ] Wait for deployment {%s} ready", hyperpilotSnapDeploymentName)
+
+		if isAvailable == v1.ConditionTrue {
+			log.Printf("[ SingleSnapController ] Deployment {%s} is ready, create SnapNode", hyperpilotSnapDeploymentName)
+			if err := s.createSnapNode(); err != nil {
+				log.Printf("[ SingleSnapController ] Create SnapNode fail: %s ", err.Error())
+				return err
+			}
+			log.Print("[ SingleSnapController ] SnapNode is creeated, Init() finished")
+			break
+		}
+		log.Printf("[ SingleSnapController ] Wait for deployment {%s} become available", hyperpilotSnapDeploymentName)
 		time.Sleep(5 * time.Second)
 	}
 
 	if s.config.GetBool("SnapTaskController.Analyzer.Enable") {
-		log.Printf("[ SnapTaskController ] Poll Analyzer is enabled")
+		log.Printf("[ SnapTaskController ] Poll Analyzer flag is enabled, launch goroutin to poll analyzer")
 		s.analyzerPoller = NewAnalyzerPoller(s.config, s)
 		go s.analyzerPoller.run()
 	}
