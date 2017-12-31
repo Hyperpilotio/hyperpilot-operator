@@ -188,11 +188,6 @@ func (s *SnapTaskController) pollingAnalyzer() {
 }
 
 func (s *SnapTaskController) checkApplications(appResps []AppResponse) {
-	analyzerURL := fmt.Sprintf("%s%s%s%d%s",
-		"http://", s.config.GetString("SnapTaskController.Analyzer.Address"),
-		":", s.config.GetInt("SnapTaskController.Analyzer.Port"), apiK8sServices)
-
-	svcResp := ServiceResponse{}
 	if !s.isSnapNodeReady() {
 		log.Printf("SnapNodes are not ready")
 		return
@@ -211,47 +206,22 @@ func (s *SnapTaskController) checkApplications(appResps []AppResponse) {
 	// app set not empty
 	for _, app := range appResps {
 		for _, svc := range app.Microservices {
-			serviceURL := analyzerURL + "/" + svc.ServiceID
-			resp, err := resty.R().Get(serviceURL)
-			if err != nil {
-				log.Print("http GET error: " + err.Error())
-				return
-			}
-
-			err = json.Unmarshal(resp.Body(), &svcResp)
-			if err != nil {
-				log.Print("JSON parse error: " + err.Error())
-				return
-			}
-
-			switch svcResp.Kind {
+			switch svc.Kind {
 			case "Deployment":
-				deployResponse := K8sDeploymentResponse{}
-				err = json.Unmarshal(resp.Body(), &deployResponse)
+				hash, err := s.ClusterState.FindReplicaSetHash(svc.Name)
 				if err != nil {
-					log.Print("JSON parse error: " + err.Error())
-					return
-				}
-				hash, err := s.ClusterState.FindReplicaSetHash(deployResponse.Data.Name)
-				if err != nil {
-					log.Printf("[ SnapTaskController ] pod-template-hash is not found for deployment {%s}", deployResponse.Data.Name)
+					log.Printf("[ SnapTaskController ] pod-template-hash is not found for deployment {%s}", svc.Name)
 					continue
 				}
-				pods := s.ClusterState.FindDeploymentPod(deployResponse.Data.Namespace, deployResponse.Data.Name, hash)
-				s.updateServiceList(deployResponse.Data.Name)
+				pods := s.ClusterState.FindDeploymentPod(svc.Namespace, svc.Name, hash)
+				s.updateServiceList(svc.Name)
 				s.updateRunningServicePods(pods)
 			case "StatefulSet":
-				statefulResponse := K8sStatefulSetResponse{}
-				err = json.Unmarshal(resp.Body(), &statefulResponse)
-				if err != nil {
-					log.Print("JSON parse error: " + err.Error())
-					return
-				}
-				pods := s.ClusterState.FindStatefulSetPod(statefulResponse.Data.Namespace, statefulResponse.Data.Name)
-				s.updateServiceList(statefulResponse.Data.Name)
+				pods := s.ClusterState.FindStatefulSetPod(svc.Namespace, svc.Name)
+				s.updateServiceList(svc.Name)
 				s.updateRunningServicePods(pods)
 			default:
-				log.Printf("Not supported service kind {%s}", svcResp.Kind)
+				log.Printf("Not supported service kind {%s}", svc.Kind)
 			}
 		}
 	}
@@ -306,7 +276,7 @@ func (s *SnapTaskController) isSnapNodeReady() bool {
 			return false
 		}
 
-		if s.Nodes[nodeName].TaskManager.isReady() == false {
+		if err := s.Nodes[nodeName].TaskManager.isReady(); err != nil {
 			return false
 		}
 	}

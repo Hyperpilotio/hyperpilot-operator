@@ -59,10 +59,7 @@ func (analyzerPoller *AnalyzerPoller) poll() error {
 }
 
 func (analyzerPoller *AnalyzerPoller) checkApplications(appResps []AppResponse) error {
-	analyzerURL := analyzerPoller.getEndpoint(apiK8sServices)
-
-	svcResp := ServiceResponse{}
-	if !analyzerPoller.SnapController.SnapNode.TaskManager.isReady() {
+	if err := analyzerPoller.SnapController.SnapNode.TaskManager.isReady(); err != nil {
 		log.Printf("[ AnalyzerPoller ] SnapNodes are not ready")
 		return nil
 	}
@@ -80,47 +77,22 @@ func (analyzerPoller *AnalyzerPoller) checkApplications(appResps []AppResponse) 
 	// app set not empty
 	for _, app := range appResps {
 		for _, svc := range app.Microservices {
-			serviceURL := analyzerURL + "/" + svc.ServiceID
-			resp, err := resty.R().Get(serviceURL)
-			if err != nil {
-				log.Printf("[ AnalyzerPoller ] GET services of app {%s} from url {%s} error: %s", app.AppID, serviceURL, err.Error())
-				return err
-			}
-
-			err = json.Unmarshal(resp.Body(), &svcResp)
-			if err != nil {
-				log.Printf("[ AnalyzerPoller ] Unable unmarshal JSON response from {%s} to ServiceResponse: %s", serviceURL, err.Error())
-				return err
-			}
-
-			switch svcResp.Kind {
+			switch svc.Kind {
 			case "Deployment":
-				deployResponse := K8sDeploymentResponse{}
-				err = json.Unmarshal(resp.Body(), &deployResponse)
+				hash, err := analyzerPoller.SnapController.ClusterState.FindReplicaSetHash(svc.Name)
 				if err != nil {
-					log.Printf("[ AnalyzerPoller ] Unable unmarshal JSON to K8sDeploymentResponse: %s", err.Error())
-					return err
-				}
-				hash, err := analyzerPoller.SnapController.ClusterState.FindReplicaSetHash(deployResponse.Data.Name)
-				if err != nil {
-					log.Printf("[ AnalyzerPoller ] pod-template-hash is not found for deployment {%s}", deployResponse.Data.Name)
+					log.Printf("[ AnalyzerPoller ] pod-template-hash is not found for deployment {%s}", svc.Name)
 					continue
 				}
-				pods := analyzerPoller.SnapController.ClusterState.FindDeploymentPod(deployResponse.Data.Namespace, deployResponse.Data.Name, hash)
-				analyzerPoller.updateServiceList(deployResponse.Data.Name)
+				pods := analyzerPoller.SnapController.ClusterState.FindDeploymentPod(svc.Namespace, svc.Name, hash)
+				analyzerPoller.updateServiceList(svc.Name)
 				analyzerPoller.updateRunningServicePods(pods)
 			case "StatefulSet":
-				statefulResponse := K8sStatefulSetResponse{}
-				err = json.Unmarshal(resp.Body(), &statefulResponse)
-				if err != nil {
-					log.Printf("[ AnalyzerPoller ] Unable unmarshal JSON to K8sStatefulSetResponse: %s", err.Error())
-					return err
-				}
-				pods := analyzerPoller.SnapController.ClusterState.FindStatefulSetPod(statefulResponse.Data.Namespace, statefulResponse.Data.Name)
-				analyzerPoller.updateServiceList(statefulResponse.Data.Name)
+				pods := analyzerPoller.SnapController.ClusterState.FindStatefulSetPod(svc.Namespace, svc.Name)
+				analyzerPoller.updateServiceList(svc.Name)
 				analyzerPoller.updateRunningServicePods(pods)
 			default:
-				log.Printf("[ AnalyzerPoller ] Not supported service kind {%s}", svcResp.Kind)
+				log.Printf("[ AnalyzerPoller ] Not supported service kind {%s}", svc.Kind)
 			}
 		}
 	}

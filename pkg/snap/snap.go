@@ -116,13 +116,13 @@ func (manager *TaskManager) CreateTask(task *Task, config *viper.Viper) (string,
 	return "", errors.New("Create Task Failed: " + err.Error())
 }
 
-func (manager *TaskManager) isPluginLoaded(plugin *Plugin) bool {
+func (manager *TaskManager) isPluginLoaded(plugin *Plugin) error {
 	r := manager.GetPlugin(plugin.Type, plugin.Name, plugin.Version)
 	if r.Err != nil {
-		log.Printf("[ TaskManager ] Plugins download not ready: %s", r.Err.Error())
-		return false
+		//log.Printf("[ TaskManager ] Plugins download not ready: %s", r.Err.Error())
+		return r.Err
 	}
-	return true
+	return nil
 }
 
 func (manager *TaskManager) StopAndRemoveTask(taskId string) error {
@@ -137,27 +137,26 @@ func (manager *TaskManager) StopAndRemoveTask(taskId string) error {
 	return nil
 }
 
-func (manager *TaskManager) isReady() bool {
+func (manager *TaskManager) isReady() error {
 	for _, p := range manager.plugins {
-		if manager.isPluginLoaded(p) == false {
-			return false
+		if err := manager.isPluginLoaded(p); err != nil {
+			return err
 		}
 	}
-	return true
+	return nil
 }
 
 func (manager *TaskManager) WaitForLoadPlugins(min int) error {
 	timeout := time.After(time.Duration(min) * time.Minute)
-	tick10s := time.Tick(10 * time.Second)
 	tick := time.Tick(5 * time.Second)
 	for {
 		select {
 		case <-timeout:
 			return errors.New("Plugin download timeout")
-		case <-tick10s:
-			log.Printf("[ TaskManager ] Wait for loading plugin complete")
 		case <-tick:
-			if manager.isReady() {
+			if err := manager.isReady(); err != nil {
+				log.Printf("[ TaskManager ] Wait for loading plugin complete: %s", err.Error())
+			} else {
 				return nil
 			}
 		}
