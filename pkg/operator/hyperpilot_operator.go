@@ -4,7 +4,9 @@ import (
 	"errors"
 	"log"
 	"sync"
+	"time"
 
+	"github.com/cenkalti/backoff"
 	"github.com/hyperpilotio/hyperpilot-operator/pkg/api"
 	"github.com/hyperpilotio/hyperpilot-operator/pkg/common"
 	"github.com/spf13/viper"
@@ -122,10 +124,6 @@ func NewHyperpilotOperator(kclient *kubernetes.Clientset, controllers []EventPro
 		config:             config,
 	}
 
-	for i, controller := range controllers {
-		hpc.accept(controller, resourceEnums[i])
-	}
-
 	return hpc, nil
 }
 
@@ -198,6 +196,10 @@ func (c *HyperpilotOperator) Run(stopCh <-chan struct{}) error {
 	controllerWg.Wait()
 	// Use wait group to wait for all controller init to finish
 
+	if !c.hasAnyController() {
+		log.Printf("[ operator ] No controller init successfully, shutdown operator")
+		return errors.New("no controller init successfully")
+	}
 	// 3. Forward events to controllers
 	c.state = operatorRunning
 
@@ -217,7 +219,20 @@ func (c *HyperpilotOperator) Run(stopCh <-chan struct{}) error {
 }
 
 func (c *HyperpilotOperator) launch(controller BaseController, controllerWg *sync.WaitGroup) {
-	controller.Init(c.clusterState)
+	retryInit := func() error {
+		log.Printf("[ operator ] %s run Init(). ", controller)
+		return controller.Init(c.clusterState)
+	}
+	b := backoff.NewExponentialBackOff()
+	b.MaxElapsedTime = 30 * time.Second
+	err := backoff.Retry(retryInit, b)
+
+	if err != nil {
+		log.Printf("[ operator ] %s Init() fail after retry and won't be loaded: %s", controller, err.Error())
+		controllerWg.Done()
+		return
+	}
+	c.accept(controller.(EventProcessor), controller.GetResourceEnum())
 	controllerWg.Done()
 }
 
@@ -255,6 +270,15 @@ func (c *HyperpilotOperator) accept(processor EventProcessor, resourceEnum Resou
 		c.rsRegisters = append(c.rsRegisters, eventReceiver)
 		log.Printf("[ operator ] {%+v} registered resource REPLICASET", processor)
 	}
+}
+
+func (c *HyperpilotOperator) hasAnyController() bool {
+	if len(c.podRegisters) != 0 || len(c.deployRegisters) != 0 ||
+		len(c.nodeRegisters) != 0 || len(c.rsRegisters) != 0 ||
+		len(c.daemonSetRegisters) != 0 {
+		return true
+	}
+	return false
 }
 
 func (c *HyperpilotOperator) InitApiServer() error {

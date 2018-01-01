@@ -23,7 +23,7 @@ spec:
         command:
         - "/usr/local/bin/run.sh"
         args:
-        - https://s3.us-east-2.amazonaws.com/jimmy-hyperpilot/init-resource-worker.json
+        - https://s3.us-east-2.amazonaws.com/jimmy-hyperpilot/init-snap-no-task.json
         imagePullPolicy: Always
         ports:
         - containerPort: 8181

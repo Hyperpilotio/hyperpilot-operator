@@ -50,3 +50,13 @@ func (set1 *StringSet) IsIdentical(set2 *StringSet) bool {
 	}
 	return true
 }
+
+func (set1 *StringSet) Minus(set2 *StringSet) *StringSet {
+	result := NewStringSet()
+	for k := range set1.set {
+		if !set2.IsExist(k) {
+			result.Add(k)
+		}
+	}
+	return result
+}

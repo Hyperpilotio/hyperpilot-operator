@@ -16,6 +16,7 @@ FROM alpine
 
 RUN addgroup -S kube-operator && adduser -S -g kube-operator kube-operator
 RUN mkdir -p /etc/operator && chown kube-operator:kube-operator /etc/operator
+RUN apk update && apk add ca-certificates
 
 USER kube-operator
 

@@ -59,112 +59,85 @@ func (analyzerPoller *AnalyzerPoller) poll() error {
 }
 
 func (analyzerPoller *AnalyzerPoller) checkApplications(appResps []AppResponse) error {
-	analyzerURL := analyzerPoller.getEndpoint(apiK8sServices)
-
-	svcResp := ServiceResponse{}
-	if !analyzerPoller.SnapController.SnapNode.TaskManager.isReady() {
+	if err := analyzerPoller.SnapController.SnapNode.TaskManager.isReady(); err != nil {
 		log.Printf("[ AnalyzerPoller ] SnapNodes are not ready")
 		return nil
 	}
-	if !analyzerPoller.isAppSetChanged(appResps) {
+
+	var appToAdd *common.StringSet
+	var appToDel *common.StringSet
+	var isIdentical bool
+	if isIdentical, appToAdd, appToDel = analyzerPoller.isAppSetChanged(appResps); !isIdentical {
 		return nil
 	}
-	log.Printf("[ AnalyzerPoller ] Application Set change")
+	log.Printf("[ AnalyzerPoller ] registered Application Set changed")
+	log.Printf("[ AnalyzerPoller ] microservice of applications %s will be added to service list ", appToAdd.ToList())
+	log.Printf("[ AnalyzerPoller ] microservice of applications %s will be deleted from service list", appToDel.ToList())
 
-	// app set is empty
-	if len(appResps) == 0 {
-		pods := []*v1.Pod{}
-		analyzerPoller.updateRunningServicePods(pods)
-	}
-
-	// app set not empty
 	for _, app := range appResps {
 		for _, svc := range app.Microservices {
-			serviceURL := analyzerURL + "/" + svc.ServiceID
-			resp, err := resty.R().Get(serviceURL)
-			if err != nil {
-				log.Printf("[ AnalyzerPoller ] GET services of app {%s} from url {%s} error: %s", app.AppID, serviceURL, err.Error())
-				return err
-			}
-
-			err = json.Unmarshal(resp.Body(), &svcResp)
-			if err != nil {
-				log.Printf("[ AnalyzerPoller ] Unable unmarshal JSON response from {%s} to ServiceResponse: %s", serviceURL, err.Error())
-				return err
-			}
-
-			switch svcResp.Kind {
+			var pods []*v1.Pod
+			switch svc.Kind {
 			case "Deployment":
-				deployResponse := K8sDeploymentResponse{}
-				err = json.Unmarshal(resp.Body(), &deployResponse)
+				hash, err := analyzerPoller.SnapController.ClusterState.FindReplicaSetHash(svc.Name)
 				if err != nil {
-					log.Printf("[ AnalyzerPoller ] Unable unmarshal JSON to K8sDeploymentResponse: %s", err.Error())
-					return err
-				}
-				hash, err := analyzerPoller.SnapController.ClusterState.FindReplicaSetHash(deployResponse.Data.Name)
-				if err != nil {
-					log.Printf("[ AnalyzerPoller ] pod-template-hash is not found for deployment {%s}", deployResponse.Data.Name)
+					log.Printf("[ AnalyzerPoller ] pod-template-hash is not found for deployment {%s}", svc.Name)
 					continue
 				}
-				pods := analyzerPoller.SnapController.ClusterState.FindDeploymentPod(deployResponse.Data.Namespace, deployResponse.Data.Name, hash)
-				analyzerPoller.updateServiceList(deployResponse.Data.Name)
-				analyzerPoller.updateRunningServicePods(pods)
+				pods = analyzerPoller.SnapController.ClusterState.FindDeploymentPod(svc.Namespace, svc.Name, hash)
 			case "StatefulSet":
-				statefulResponse := K8sStatefulSetResponse{}
-				err = json.Unmarshal(resp.Body(), &statefulResponse)
-				if err != nil {
-					log.Printf("[ AnalyzerPoller ] Unable unmarshal JSON to K8sStatefulSetResponse: %s", err.Error())
-					return err
-				}
-				pods := analyzerPoller.SnapController.ClusterState.FindStatefulSetPod(statefulResponse.Data.Namespace, statefulResponse.Data.Name)
-				analyzerPoller.updateServiceList(statefulResponse.Data.Name)
-				analyzerPoller.updateRunningServicePods(pods)
+				pods = analyzerPoller.SnapController.ClusterState.FindStatefulSetPod(svc.Namespace, svc.Name)
 			default:
-				log.Printf("[ AnalyzerPoller ] Not supported service kind {%s}", svcResp.Kind)
+				log.Printf("[ AnalyzerPoller ] Not supported service kind {%s}", svc.Kind)
+				continue
 			}
+
+			if appToAdd.IsExist(app.AppID) {
+				analyzerPoller.SnapController.ServiceList.add(app.AppID, svc.Name)
+				snapNode := analyzerPoller.SnapController.SnapNode
+				for _, p := range pods {
+					log.Printf("[ AnalyzerPoller ] add Running Service Pod {%s} in Node {%s}. ", p.Name, snapNode.NodeId)
+					container := p.Spec.Containers[0]
+					if ok := snapNode.RunningServicePods.find(p.Name); !ok {
+						snapNode.RunningServicePods.addPodInfo(p.Name, ServicePodInfo{
+							Namespace: p.Namespace,
+							Port:      container.Ports[0].HostPort,
+						})
+					}
+				}
+			}
+
+			if appToDel.IsExist(app.AppID) {
+				analyzerPoller.SnapController.ServiceList.deleteWholeApp(app.AppID)
+				snapNode := analyzerPoller.SnapController.SnapNode
+				for _, p := range pods {
+					log.Printf("[ AnalyzerPoller ] delete Running Service Pod {%s} in Node {%s}. ", p.Name, snapNode.NodeId)
+					snapNode.RunningServicePods.delPodInfo(p.Name)
+				}
+			}
+
 		}
 	}
 	return analyzerPoller.SnapController.SnapNode.reconcileSnapState()
 }
 
-func (analyzerPoller *AnalyzerPoller) updateRunningServicePods(pods []*v1.Pod) {
-	snapNode := analyzerPoller.SnapController.SnapNode
-
-	//1. add Pod to RunningServicePods when pod is exist
-	for _, p := range pods {
-		container := p.Spec.Containers[0]
-
-		if ok := snapNode.RunningServicePods.find(p.Name); !ok {
-			snapNode.RunningServicePods.addPodInfo(p.Name, ServicePodInfo{
-				Namespace: p.Namespace,
-				Port:      container.Ports[0].HostPort,
-			})
-			log.Printf("add Running Service Pod {%s} in Node {%s}. ", p.Name, snapNode.NodeId)
+func (analyzerPoller *AnalyzerPoller) isAppSetChanged(appResps []AppResponse) (isIdentical bool, tooAddSet *common.StringSet, tooDelSet *common.StringSet) {
+	appSet := common.NewStringSet()
+	for _, app := range appResps {
+		if app.State == REGISTERED {
+			appSet.Add(app.AppID)
 		}
 	}
 
-	//2. delete pod from RunningServicePods when the pod is not exist
-	snapNode.RunningServicePods.deletePodInfoIfNotPresentInList(pods)
-}
-
-// todo: lock!
-// todo: check overwrite by analyzer result
-func (analyzerPoller *AnalyzerPoller) updateServiceList(deployName string) {
-	analyzerPoller.SnapController.ServiceList = append(analyzerPoller.SnapController.ServiceList, deployName)
-}
-
-func (analyzerPoller *AnalyzerPoller) isAppSetChanged(appResps []AppResponse) bool {
-	appSet := common.NewStringSet()
-	for _, app := range appResps {
-		appSet.Add(app.AppID)
-	}
+	toDelSet := analyzerPoller.ApplicationSet.Minus(appSet)
+	toAddSet := appSet.Minus(analyzerPoller.ApplicationSet)
 
 	if appSet.IsIdentical(analyzerPoller.ApplicationSet) {
 		analyzerPoller.ApplicationSet = appSet
-		return false
+		return false, toAddSet, toDelSet
 	} else {
 		analyzerPoller.ApplicationSet = appSet
-		return true
+		return true, toAddSet, toDelSet
 	}
 }
 
