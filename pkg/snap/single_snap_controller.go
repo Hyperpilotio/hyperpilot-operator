@@ -338,14 +338,15 @@ func (s *SingleSnapController) ProcessNode(e *common.NodeEvent) {}
 func (s *SingleSnapController) ProcessReplicaSet(e *common.ReplicaSetEvent) {}
 
 func (s *SingleSnapController) Close() {
-	deletePolicy := metav1.DeletePropagationForeground
-	deploymentsClient := s.K8sClient.ExtensionsV1beta1Client.Deployments(hyperpilotSnapNamespace)
-	if err := deploymentsClient.Delete(hyperpilotSnapDeploymentName, &metav1.DeleteOptions{
-		PropagationPolicy: &deletePolicy,
-	}); err != nil {
-		log.Printf("[ SingleSnapController ] Delete deployment {%s} fail: %s", hyperpilotSnapDeploymentName, err.Error())
-		return
-	}
-	log.Printf("[ SingleSnapController ] Delete deployment {%s}", hyperpilotSnapDeploymentName)
-	//todo: wait until finish
+	/*
+		deletePolicy := metav1.DeletePropagationForeground
+		deploymentsClient := s.K8sClient.ExtensionsV1beta1Client.Deployments(hyperpilotSnapNamespace)
+		if err := deploymentsClient.Delete(hyperpilotSnapDeploymentName, &metav1.DeleteOptions{
+			PropagationPolicy: &deletePolicy,
+		}); err != nil {
+			log.Printf("[ SingleSnapController ] Delete deployment {%s} fail: %s", hyperpilotSnapDeploymentName, err.Error())
+			return
+		}
+		log.Printf("[ SingleSnapController ] Delete deployment {%s}", hyperpilotSnapDeploymentName)
+	*/
 }
