@@ -1,7 +1,8 @@
 package snap
 
 const (
-	apiApps string = "/api/v1/apps"
+	apiApps    string = "/api/v1/apps"
+	REGISTERED        = "Registered"
 )
 
 type MicroService struct {

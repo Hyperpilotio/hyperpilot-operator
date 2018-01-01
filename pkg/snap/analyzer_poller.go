@@ -63,20 +63,20 @@ func (analyzerPoller *AnalyzerPoller) checkApplications(appResps []AppResponse) 
 		log.Printf("[ AnalyzerPoller ] SnapNodes are not ready")
 		return nil
 	}
-	if !analyzerPoller.isAppSetChanged(appResps) {
+
+	var appToAdd *common.StringSet
+	var appToDel *common.StringSet
+	var isIdentical bool
+	if isIdentical, appToAdd, appToDel = analyzerPoller.isAppSetChanged(appResps); !isIdentical {
 		return nil
 	}
-	log.Printf("[ AnalyzerPoller ] Application Set change")
+	log.Printf("[ AnalyzerPoller ] registered Application Set changed")
+	log.Printf("[ AnalyzerPoller ] microservice of applications %s will be added to service list ", appToAdd.ToList())
+	log.Printf("[ AnalyzerPoller ] microservice of applications %s will be deleted from service list", appToDel.ToList())
 
-	// app set is empty
-	if len(appResps) == 0 {
-		pods := []*v1.Pod{}
-		analyzerPoller.updateRunningServicePods(pods)
-	}
-
-	// app set not empty
 	for _, app := range appResps {
 		for _, svc := range app.Microservices {
+			var pods []*v1.Pod
 			switch svc.Kind {
 			case "Deployment":
 				hash, err := analyzerPoller.SnapController.ClusterState.FindReplicaSetHash(svc.Name)
@@ -84,58 +84,60 @@ func (analyzerPoller *AnalyzerPoller) checkApplications(appResps []AppResponse) 
 					log.Printf("[ AnalyzerPoller ] pod-template-hash is not found for deployment {%s}", svc.Name)
 					continue
 				}
-				pods := analyzerPoller.SnapController.ClusterState.FindDeploymentPod(svc.Namespace, svc.Name, hash)
-				analyzerPoller.updateServiceList(app.AppID, svc.Name)
-				analyzerPoller.updateRunningServicePods(pods)
+				pods = analyzerPoller.SnapController.ClusterState.FindDeploymentPod(svc.Namespace, svc.Name, hash)
 			case "StatefulSet":
-				pods := analyzerPoller.SnapController.ClusterState.FindStatefulSetPod(svc.Namespace, svc.Name)
-				analyzerPoller.updateServiceList(app.AppID, svc.Name)
-				analyzerPoller.updateRunningServicePods(pods)
+				pods = analyzerPoller.SnapController.ClusterState.FindStatefulSetPod(svc.Namespace, svc.Name)
 			default:
 				log.Printf("[ AnalyzerPoller ] Not supported service kind {%s}", svc.Kind)
+				continue
 			}
+
+			if appToAdd.IsExist(app.AppID) {
+				analyzerPoller.SnapController.ServiceList.add(app.AppID, svc.Name)
+				snapNode := analyzerPoller.SnapController.SnapNode
+				for _, p := range pods {
+					log.Printf("[ AnalyzerPoller ] add Running Service Pod {%s} in Node {%s}. ", p.Name, snapNode.NodeId)
+					container := p.Spec.Containers[0]
+					if ok := snapNode.RunningServicePods.find(p.Name); !ok {
+						snapNode.RunningServicePods.addPodInfo(p.Name, ServicePodInfo{
+							Namespace: p.Namespace,
+							Port:      container.Ports[0].HostPort,
+						})
+					}
+				}
+			}
+
+			if appToDel.IsExist(app.AppID) {
+				analyzerPoller.SnapController.ServiceList.deleteWholeApp(app.AppID)
+				snapNode := analyzerPoller.SnapController.SnapNode
+				for _, p := range pods {
+					log.Printf("[ AnalyzerPoller ] delete Running Service Pod {%s} in Node {%s}. ", p.Name, snapNode.NodeId)
+					snapNode.RunningServicePods.delPodInfo(p.Name)
+				}
+			}
+
 		}
 	}
 	return analyzerPoller.SnapController.SnapNode.reconcileSnapState()
 }
 
-func (analyzerPoller *AnalyzerPoller) updateRunningServicePods(pods []*v1.Pod) {
-	snapNode := analyzerPoller.SnapController.SnapNode
-
-	//1. add Pod to RunningServicePods when pod is exist
-	for _, p := range pods {
-		log.Printf("[ AnalyzerPoller ] add Running Service Pod {%s} in Node {%s}. ", p.Name, snapNode.NodeId)
-		container := p.Spec.Containers[0]
-		if ok := snapNode.RunningServicePods.find(p.Name); !ok {
-			snapNode.RunningServicePods.addPodInfo(p.Name, ServicePodInfo{
-				Namespace: p.Namespace,
-				Port:      container.Ports[0].HostPort,
-			})
+func (analyzerPoller *AnalyzerPoller) isAppSetChanged(appResps []AppResponse) (isIdentical bool, tooAddSet *common.StringSet, tooDelSet *common.StringSet) {
+	appSet := common.NewStringSet()
+	for _, app := range appResps {
+		if app.State == REGISTERED {
+			appSet.Add(app.AppID)
 		}
 	}
 
-	//2. delete pod from RunningServicePods when the pod is not exist
-	snapNode.RunningServicePods.deletePodInfoIfNotPresentInList(pods)
-}
-
-func (analyzerPoller *AnalyzerPoller) updateServiceList(appName, serviceName string) {
-	//add new service name
-	analyzerPoller.SnapController.ServiceList.add(appName, serviceName)
-	//todo: delete service list
-}
-
-func (analyzerPoller *AnalyzerPoller) isAppSetChanged(appResps []AppResponse) bool {
-	appSet := common.NewStringSet()
-	for _, app := range appResps {
-		appSet.Add(app.AppID)
-	}
+	toDelSet := analyzerPoller.ApplicationSet.Minus(appSet)
+	toAddSet := appSet.Minus(analyzerPoller.ApplicationSet)
 
 	if appSet.IsIdentical(analyzerPoller.ApplicationSet) {
 		analyzerPoller.ApplicationSet = appSet
-		return false
+		return false, toAddSet, toDelSet
 	} else {
 		analyzerPoller.ApplicationSet = appSet
-		return true
+		return true, toAddSet, toDelSet
 	}
 }
 

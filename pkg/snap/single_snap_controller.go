@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hyperpilotio/hyperpilot-operator/pkg/common"
@@ -14,7 +15,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/api/v1"
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
-	"sync"
 )
 
 const hyperpilotSnapNamespace = "hyperpilot"
@@ -58,32 +58,23 @@ func (watchinglist *ServiceWatchingList) isServicePod(pod *v1.Pod) bool {
 	return false
 }
 
-func (watchinglist *ServiceWatchingList) add(appName, serviceName string) {
+func (watchinglist *ServiceWatchingList) add(appID, serviceName string) {
 	watchinglist.Lock.Lock()
 	defer watchinglist.Lock.Unlock()
 
-	if _, ok := watchinglist.watchingList[appName]; !ok {
-		watchinglist.watchingList[appName] = []string{}
+	if _, ok := watchinglist.watchingList[appID]; !ok {
+		watchinglist.watchingList[appID] = []string{}
 	}
-
-	watchinglist.watchingList[appName] = append(watchinglist.watchingList[appName], serviceName)
+	watchinglist.watchingList[appID] = append(watchinglist.watchingList[appID], serviceName)
 }
 
-func (watchinglist *ServiceWatchingList) delete(appName, serviceName string) {
+func (watchinglist *ServiceWatchingList) deleteWholeApp(appID string) {
 	watchinglist.Lock.Lock()
 	defer watchinglist.Lock.Unlock()
-
-}
-
-func (watchinglist *ServiceWatchingList) deleteWholeApp(appName string) {
-	watchinglist.Lock.Lock()
-	defer watchinglist.Lock.Unlock()
-
-	delete(watchinglist.watchingList, appName)
+	delete(watchinglist.watchingList, appID)
 }
 
 func NewSingleSnapController(config *viper.Viper) *SingleSnapController {
-
 	return &SingleSnapController{
 		ServiceList: NewServiceWatchingList(config.GetStringSlice("SnapTaskController.ServiceList")),
 		SnapNode:    nil,
