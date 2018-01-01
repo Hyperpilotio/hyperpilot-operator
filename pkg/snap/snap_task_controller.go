@@ -1,7 +1,6 @@
 package snap
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -12,7 +11,6 @@ import (
 	"github.com/hyperpilotio/hyperpilot-operator/pkg/common"
 	"github.com/hyperpilotio/hyperpilot-operator/pkg/operator"
 	"github.com/spf13/viper"
-	"gopkg.in/resty.v1"
 	"k8s.io/client-go/pkg/api/v1"
 )
 
@@ -22,6 +20,7 @@ type SnapTaskController struct {
 	Nodes          map[string]*SnapNode
 	ClusterState   *common.ClusterState
 	config         *viper.Viper
+	analyzerPoller *AnalyzerPoller
 	ApplicationSet *common.StringSet
 }
 
@@ -83,8 +82,9 @@ func (s *SnapTaskController) Init(clusterState *common.ClusterState) error {
 	log.Print("[ SnapTaskController ] Init() Finished.")
 	if s.config.GetBool("SnapTaskController.Analyzer.Enable") {
 		log.Printf("[ SnapTaskController ] Poll Analyzer is enabled")
-		go s.pollingAnalyzer()
+		s.analyzerPoller = NewAnalyzerPoller(s.config, s, 3*time.Second)
 	}
+
 	return nil
 }
 
@@ -163,31 +163,7 @@ func isSnapPod(pod *v1.Pod) bool {
 	return false
 }
 
-func (s *SnapTaskController) pollingAnalyzer() {
-	tick := time.Tick(3 * time.Second)
-	for {
-		select {
-		case <-tick:
-			analyzerURL := fmt.Sprintf("%s%s%s%d%s",
-				"http://", s.config.GetString("SnapTaskController.Analyzer.Address"),
-				":", s.config.GetInt("SnapTaskController.Analyzer.Port"), apiApps)
-			appResp := AppResponses{}
-			resp, err := resty.R().Get(analyzerURL)
-			if err != nil {
-				log.Print("http GET error: " + err.Error())
-				return
-			}
-			err = json.Unmarshal(resp.Body(), &appResp)
-			if err != nil {
-				log.Print("JSON parse error: " + err.Error())
-				return
-			}
-			s.checkApplications(appResp.Data)
-		}
-	}
-}
-
-func (s *SnapTaskController) checkApplications(appResps []AppResponse) {
+func (s *SnapTaskController) AppsUpdated(appResps []AppResponse) {
 	if !s.isSnapNodeReady() {
 		log.Printf("SnapNodes are not ready")
 		return
@@ -195,7 +171,8 @@ func (s *SnapTaskController) checkApplications(appResps []AppResponse) {
 	if !s.isAppSetChanged(appResps) {
 		return
 	}
-	log.Printf("[ SnapTaskController ] Application Set change")
+
+	log.Printf("[ SnapTaskController ] Application Set changed")
 
 	// app set is empty
 	if len(appResps) == 0 {
@@ -225,6 +202,7 @@ func (s *SnapTaskController) checkApplications(appResps []AppResponse) {
 			}
 		}
 	}
+
 	s.reconcileSnapState()
 }
 
@@ -255,7 +233,7 @@ func (s *SnapTaskController) updateServiceList(deployName string) {
 func (s *SnapTaskController) isAppSetChanged(appResps []AppResponse) bool {
 	appSet := common.NewStringSet()
 	for _, app := range appResps {
-		appSet.Add(app.AppID)
+		appSet.Add(app.AppId)
 	}
 
 	if appSet.IsIdentical(s.ApplicationSet) {

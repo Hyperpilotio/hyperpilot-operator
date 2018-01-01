@@ -28,6 +28,7 @@ type SingleSnapController struct {
 	ClusterState     *common.ClusterState
 	K8sClient        *kubernetes.Clientset
 	analyzerPoller   *AnalyzerPoller
+	ApplicationSet   *common.StringSet
 }
 
 type ServiceWatchingList struct {
@@ -76,9 +77,10 @@ func (watchinglist *ServiceWatchingList) deleteWholeApp(appID string) {
 
 func NewSingleSnapController(config *viper.Viper) *SingleSnapController {
 	return &SingleSnapController{
-		ServiceList: NewServiceWatchingList(config.GetStringSlice("SnapTaskController.ServiceList")),
-		SnapNode:    nil,
-		config:      config,
+		ServiceList:    NewServiceWatchingList(config.GetStringSlice("SnapTaskController.ServiceList")),
+		SnapNode:       nil,
+		config:         config,
+		ApplicationSet: common.NewStringSet(),
 	}
 }
 
@@ -144,11 +146,95 @@ func (s *SingleSnapController) Init(clusterState *common.ClusterState) error {
 
 	if s.config.GetBool("SnapTaskController.Analyzer.Enable") {
 		log.Printf("[ SnapTaskController ] Poll Analyzer flag is enabled, launch goroutin to poll analyzer")
-		s.analyzerPoller = NewAnalyzerPoller(s.config, s)
-		go s.analyzerPoller.run()
+		s.analyzerPoller = NewAnalyzerPoller(s.config, s, 1*time.Minute)
 	}
 
 	return nil
+}
+
+func (s *SingleSnapController) isAppSetChanged(appResps []AppResponse) (isIdentical bool, tooAddSet *common.StringSet, tooDelSet *common.StringSet) {
+	appSet := common.NewStringSet()
+	for _, app := range appResps {
+		if app.State == REGISTERED {
+			appSet.Add(app.AppId)
+		}
+	}
+
+	toDelSet := s.ApplicationSet.Minus(appSet)
+	toAddSet := appSet.Minus(s.ApplicationSet)
+
+	if appSet.IsIdentical(s.ApplicationSet) {
+		s.ApplicationSet = appSet
+		return false, toAddSet, toDelSet
+	} else {
+		s.ApplicationSet = appSet
+		return true, toAddSet, toDelSet
+	}
+}
+
+func (s *SingleSnapController) AppsUpdated(responses []AppResponse) {
+	if err := s.SnapNode.TaskManager.isReady(); err != nil {
+		log.Printf("[ AnalyzerPoller ] SnapNodes are not ready")
+		return
+	}
+
+	var appToAdd *common.StringSet
+	var appToDel *common.StringSet
+	var isIdentical bool
+	if isIdentical, appToAdd, appToDel = s.isAppSetChanged(responses); !isIdentical {
+		return
+	}
+
+	log.Printf("[ AnalyzerPoller ] registered Application Set changed")
+	log.Printf("[ AnalyzerPoller ] microservice of applications %s will be added to service list ", appToAdd.ToList())
+	log.Printf("[ AnalyzerPoller ] microservice of applications %s will be deleted from service list", appToDel.ToList())
+
+	for _, app := range responses {
+		for _, svc := range app.Microservices {
+			var pods []*v1.Pod
+			switch svc.Kind {
+			case "Deployment":
+				hash, err := s.ClusterState.FindReplicaSetHash(svc.Name)
+				if err != nil {
+					log.Printf("[ AnalyzerPoller ] pod-template-hash is not found for deployment {%s}", svc.Name)
+					continue
+				}
+				pods = s.ClusterState.FindDeploymentPod(svc.Namespace, svc.Name, hash)
+			case "StatefulSet":
+				pods = s.ClusterState.FindStatefulSetPod(svc.Namespace, svc.Name)
+			default:
+				log.Printf("[ AnalyzerPoller ] Not supported service kind {%s}", svc.Kind)
+				continue
+			}
+
+			if appToAdd.IsExist(app.AppId) {
+				s.ServiceList.add(app.AppId, svc.Name)
+				snapNode := s.SnapNode
+				for _, p := range pods {
+					log.Printf("[ AnalyzerPoller ] add Running Service Pod {%s} in Node {%s}. ", p.Name, snapNode.NodeId)
+					container := p.Spec.Containers[0]
+					if ok := snapNode.RunningServicePods.find(p.Name); !ok {
+						snapNode.RunningServicePods.addPodInfo(p.Name, ServicePodInfo{
+							Namespace: p.Namespace,
+							Port:      container.Ports[0].HostPort,
+						})
+					}
+				}
+			}
+
+			if appToDel.IsExist(app.AppId) {
+				s.ServiceList.deleteWholeApp(app.AppId)
+				snapNode := s.SnapNode
+				for _, p := range pods {
+					log.Printf("[ AnalyzerPoller ] delete Running Service Pod {%s} in Node {%s}. ", p.Name, snapNode.NodeId)
+					snapNode.RunningServicePods.delPodInfo(p.Name)
+				}
+			}
+
+		}
+	}
+
+	s.SnapNode.reconcileSnapState()
 }
 
 func (s *SingleSnapController) createSnapNode() error {
