@@ -72,10 +72,11 @@ func (runningService *RunningServiceList) deletePodInfoIfNotPresentInList(podLis
 	runningService.Lock.Lock()
 	defer runningService.Lock.Unlock()
 
-	for podName := range runningService.RunningServicePods {
-		if !containPod(podList, podName) {
-			delete(runningService.RunningServicePods, podName)
-			log.Printf("[ RunningServiceList ] Delete Running Service Pod {%s} in Node {%s} ", podName, runningService.SnapNode.NodeId)
+	for _, p := range podList {
+		_, ok := runningService.RunningServicePods[p.Name]
+		if !ok {
+			delete(runningService.RunningServicePods, p.Name)
+			log.Printf("[ RunningServiceList ] Delete Running Service Pod {%s} in Node {%s} ", p.Name, runningService.SnapNode.NodeId)
 		}
 	}
 }

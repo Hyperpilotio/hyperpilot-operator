@@ -104,14 +104,13 @@ func (analyzerPoller *AnalyzerPoller) updateRunningServicePods(pods []*v1.Pod) {
 
 	//1. add Pod to RunningServicePods when pod is exist
 	for _, p := range pods {
+		log.Printf("[ AnalyzerPoller ] add Running Service Pod {%s} in Node {%s}. ", p.Name, snapNode.NodeId)
 		container := p.Spec.Containers[0]
-
 		if ok := snapNode.RunningServicePods.find(p.Name); !ok {
 			snapNode.RunningServicePods.addPodInfo(p.Name, ServicePodInfo{
 				Namespace: p.Namespace,
 				Port:      container.Ports[0].HostPort,
 			})
-			log.Printf("add Running Service Pod {%s} in Node {%s}. ", p.Name, snapNode.NodeId)
 		}
 	}
 
