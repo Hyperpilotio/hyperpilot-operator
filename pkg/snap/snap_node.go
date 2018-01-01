@@ -2,7 +2,6 @@ package snap
 
 import (
 	"log"
-	"strings"
 	"sync"
 
 	"github.com/hyperpilotio/hyperpilot-operator/pkg/common"
@@ -81,15 +80,6 @@ func (runningService *RunningServiceList) deletePodInfoIfNotPresentInList(podLis
 	}
 }
 
-func containPod(pods []*v1.Pod, podName string) bool {
-	for _, pod := range pods {
-		if podName == pod.Name {
-			return true
-		}
-	}
-	return false
-}
-
 type SnapTaskList struct {
 	Lock      *sync.Mutex
 	SnapTasks map[string]string
@@ -163,11 +153,11 @@ type SnapNode struct {
 	RunningServicePods *RunningServiceList
 	PodEvents          chan *common.PodEvent
 	ExitChan           chan bool
-	ServiceList        *[]string
+	ServiceList        *ServiceWatchingList
 	config             *viper.Viper
 }
 
-func NewSnapNode(nodeName string, externalIp string, serviceList *[]string, config *viper.Viper) *SnapNode {
+func NewSnapNode(nodeName string, externalIp string, serviceList *ServiceWatchingList, config *viper.Viper) *SnapNode {
 	snapNode := &SnapNode{
 		NodeId:      nodeName,
 		ExternalIP:  externalIp,
@@ -234,7 +224,7 @@ func (n *SnapNode) initSingleSnap(isOutsideCluster bool, snapPod *v1.Pod, cluste
 
 	clusterState.Lock.RLock()
 	for _, p := range clusterState.Pods {
-		if n.isServicePod(p) {
+		if n.ServiceList.isServicePod(p) {
 			// TODO: How do we know which container has the right port? and which port?
 			container := p.Spec.Containers[0]
 			if len(container.Ports) > 0 {
@@ -286,7 +276,7 @@ func (n *SnapNode) initSnap(isOutsideCluster bool, snapPod *v1.Pod, clusterState
 
 	clusterState.Lock.RLock()
 	for _, p := range clusterState.Pods {
-		if p.Spec.NodeName == n.NodeId && n.isServicePod(p) {
+		if p.Spec.NodeName == n.NodeId && n.ServiceList.isServicePod(p) {
 			// TODO: How do we know which container has the right port? and which port?
 			container := p.Spec.Containers[0]
 			if len(container.Ports) > 0 {
@@ -349,15 +339,6 @@ func (n *SnapNode) Run(isOutsideCluster bool) {
 			}
 		}
 	}()
-}
-
-func (n *SnapNode) isServicePod(pod *v1.Pod) bool {
-	for _, service := range *n.ServiceList {
-		if strings.HasPrefix(pod.Name, service) {
-			return true
-		}
-	}
-	return false
 }
 
 func (n *SnapNode) Exit() {

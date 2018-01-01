@@ -14,13 +14,14 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/api/v1"
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
+	"sync"
 )
 
 const hyperpilotSnapNamespace = "hyperpilot"
 const hyperpilotSnapDeploymentName = "hyperpilot-snap"
 
 type SingleSnapController struct {
-	ServiceList      []string
+	ServiceList      *ServiceWatchingList
 	SnapNode         *SnapNode
 	DeletingSnapNode *SnapNode
 	config           *viper.Viper
@@ -29,9 +30,62 @@ type SingleSnapController struct {
 	analyzerPoller   *AnalyzerPoller
 }
 
+type ServiceWatchingList struct {
+	Lock         *sync.Mutex
+	watchingList map[string][]string
+}
+
+func NewServiceWatchingList(defaultList []string) *ServiceWatchingList {
+	list := ServiceWatchingList{
+		Lock:         &sync.Mutex{},
+		watchingList: make(map[string][]string),
+	}
+	list.watchingList["HP_DEFAULT"] = defaultList
+	return &list
+}
+
+func (watchinglist *ServiceWatchingList) isServicePod(pod *v1.Pod) bool {
+	watchinglist.Lock.Lock()
+	defer watchinglist.Lock.Unlock()
+
+	for _, serviceList := range watchinglist.watchingList {
+		for _, service := range serviceList {
+			if strings.HasPrefix(pod.Name, service) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (watchinglist *ServiceWatchingList) add(appName, serviceName string) {
+	watchinglist.Lock.Lock()
+	defer watchinglist.Lock.Unlock()
+
+	if _, ok := watchinglist.watchingList[appName]; !ok {
+		watchinglist.watchingList[appName] = []string{}
+	}
+
+	watchinglist.watchingList[appName] = append(watchinglist.watchingList[appName], serviceName)
+}
+
+func (watchinglist *ServiceWatchingList) delete(appName, serviceName string) {
+	watchinglist.Lock.Lock()
+	defer watchinglist.Lock.Unlock()
+
+}
+
+func (watchinglist *ServiceWatchingList) deleteWholeApp(appName string) {
+	watchinglist.Lock.Lock()
+	defer watchinglist.Lock.Unlock()
+
+	delete(watchinglist.watchingList, appName)
+}
+
 func NewSingleSnapController(config *viper.Viper) *SingleSnapController {
+
 	return &SingleSnapController{
-		ServiceList: config.GetStringSlice("SnapTaskController.ServiceList"),
+		ServiceList: NewServiceWatchingList(config.GetStringSlice("SnapTaskController.ServiceList")),
 		SnapNode:    nil,
 		config:      config,
 	}
@@ -140,7 +194,7 @@ func (s *SingleSnapController) createSnapNode() error {
 		return errors.New(fmt.Sprintf("[ SingleSnapController ] can't find Pod with Label pod-template-hash=%s", hash))
 	}
 	nodeName := pods.Items[0].Spec.NodeName
-	s.SnapNode = NewSnapNode(nodeName, s.ClusterState.Nodes[nodeName].ExternalIP, &s.ServiceList, s.config)
+	s.SnapNode = NewSnapNode(nodeName, s.ClusterState.Nodes[nodeName].ExternalIP, s.ServiceList, s.config)
 	if err := s.SnapNode.initSingleSnap(s.isOutsideCluster(), &pods.Items[0], s.ClusterState); err != nil {
 		log.Printf("[ SingleSnapController ] SnapNode Init fail : %s", err.Error())
 		return err
@@ -166,7 +220,7 @@ func (s *SingleSnapController) ProcessPod(e *common.PodEvent) {
 			log.Printf("[ SingleSnapController ] Delete SnapNode in {%s}", s.DeletingSnapNode.NodeId)
 			s.DeletingSnapNode.Exit()
 		}
-		if s.SnapNode.isServicePod(e.Cur) {
+		if s.ServiceList.isServicePod(e.Cur) {
 			s.SnapNode.PodEvents <- e
 		}
 	case common.ADD, common.UPDATE:
@@ -176,7 +230,7 @@ func (s *SingleSnapController) ProcessPod(e *common.PodEvent) {
 				if s.SnapNode != nil {
 					s.DeletingSnapNode = s.SnapNode
 				}
-				newNode := NewSnapNode(nodeName, s.ClusterState.Nodes[nodeName].ExternalIP, &s.ServiceList, s.config)
+				newNode := NewSnapNode(nodeName, s.ClusterState.Nodes[nodeName].ExternalIP, s.ServiceList, s.config)
 				s.SnapNode = newNode
 				go func() {
 					if err := s.SnapNode.initSingleSnap(s.isOutsideCluster(), e.Cur, s.ClusterState); err != nil {
@@ -184,7 +238,7 @@ func (s *SingleSnapController) ProcessPod(e *common.PodEvent) {
 					}
 				}()
 			}
-			if s.SnapNode.isServicePod(e.Cur) {
+			if s.ServiceList.isServicePod(e.Cur) {
 				s.SnapNode.PodEvents <- e
 			}
 		}

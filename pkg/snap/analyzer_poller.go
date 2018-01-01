@@ -85,11 +85,11 @@ func (analyzerPoller *AnalyzerPoller) checkApplications(appResps []AppResponse) 
 					continue
 				}
 				pods := analyzerPoller.SnapController.ClusterState.FindDeploymentPod(svc.Namespace, svc.Name, hash)
-				analyzerPoller.updateServiceList(svc.Name)
+				analyzerPoller.updateServiceList(app.AppID, svc.Name)
 				analyzerPoller.updateRunningServicePods(pods)
 			case "StatefulSet":
 				pods := analyzerPoller.SnapController.ClusterState.FindStatefulSetPod(svc.Namespace, svc.Name)
-				analyzerPoller.updateServiceList(svc.Name)
+				analyzerPoller.updateServiceList(app.AppID, svc.Name)
 				analyzerPoller.updateRunningServicePods(pods)
 			default:
 				log.Printf("[ AnalyzerPoller ] Not supported service kind {%s}", svc.Kind)
@@ -118,10 +118,10 @@ func (analyzerPoller *AnalyzerPoller) updateRunningServicePods(pods []*v1.Pod) {
 	snapNode.RunningServicePods.deletePodInfoIfNotPresentInList(pods)
 }
 
-// todo: lock!
-// todo: check overwrite by analyzer result
-func (analyzerPoller *AnalyzerPoller) updateServiceList(deployName string) {
-	analyzerPoller.SnapController.ServiceList = append(analyzerPoller.SnapController.ServiceList, deployName)
+func (analyzerPoller *AnalyzerPoller) updateServiceList(appName, serviceName string) {
+	//add new service name
+	analyzerPoller.SnapController.ServiceList.add(appName, serviceName)
+	//todo: delete service list
 }
 
 func (analyzerPoller *AnalyzerPoller) isAppSetChanged(appResps []AppResponse) bool {
