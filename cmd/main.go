@@ -56,11 +56,14 @@ func main() {
 		}
 	}()
 
-	// Wait for signal or error from operator
-	<-sigs
+	// Wait for shutdown signal
+	select {
+	case <-sigs:
+		log.Printf("[ main ] Receive OS KILL signal, shutdown operator")
+	case <-stop:
+		log.Println("[ main ] Receive controller Init() fail signal, shutdown operator")
+	}
 	hpc.Close()
-
-	// Signal all goroutines in operator to exit
 	close(stop)
 
 	log.Printf("Hyperpilot operator exiting")

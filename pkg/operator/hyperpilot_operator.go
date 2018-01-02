@@ -153,7 +153,7 @@ func (c *HyperpilotOperator) ProcessReplicaSet(e *common.ReplicaSetEvent) {
 }
 
 // Run starts the process for listening for pod changes and acting upon those changes.
-func (c *HyperpilotOperator) Run(stopCh <-chan struct{}) error {
+func (c *HyperpilotOperator) Run(stopCh chan struct{}) error {
 	// Lifecycle:
 	c.state = operatorInitializing
 
@@ -190,16 +190,12 @@ func (c *HyperpilotOperator) Run(stopCh <-chan struct{}) error {
 	for _, controller := range c.controllers {
 		controllerWg.Add(1)
 		// pass controller variable to launch() to avoid reference to the same object.
-		go c.launch(controller, controllerWg)
+		go c.launch(controller, controllerWg, stopCh)
 	}
 
 	controllerWg.Wait()
 	// Use wait group to wait for all controller init to finish
 
-	if !c.hasAnyController() {
-		log.Printf("[ operator ] No controller init successfully, shutdown operator")
-		return errors.New("no controller init successfully")
-	}
 	// 3. Forward events to controllers
 	c.state = operatorRunning
 
@@ -218,7 +214,7 @@ func (c *HyperpilotOperator) Run(stopCh <-chan struct{}) error {
 	return nil
 }
 
-func (c *HyperpilotOperator) launch(controller BaseController, controllerWg *sync.WaitGroup) {
+func (c *HyperpilotOperator) launch(controller BaseController, controllerWg *sync.WaitGroup, stopCh chan struct{}) {
 	retryInit := func() error {
 		log.Printf("[ operator ] %s run Init(). ", controller)
 		return controller.Init(c.clusterState)
@@ -228,8 +224,9 @@ func (c *HyperpilotOperator) launch(controller BaseController, controllerWg *syn
 	err := backoff.Retry(retryInit, b)
 
 	if err != nil {
-		log.Printf("[ operator ] %s Init() fail after retry and won't be loaded: %s", controller, err.Error())
+		log.Printf("[ operator ] %s Init() fail after retry. Send signal to shutdown operator: %s", controller, err.Error())
 		controllerWg.Done()
+		stopCh <- struct{}{}
 		return
 	}
 	c.accept(controller.(EventProcessor), controller.GetResourceEnum())
@@ -270,15 +267,6 @@ func (c *HyperpilotOperator) accept(processor EventProcessor, resourceEnum Resou
 		c.rsRegisters = append(c.rsRegisters, eventReceiver)
 		log.Printf("[ operator ] {%+v} registered resource REPLICASET", processor)
 	}
-}
-
-func (c *HyperpilotOperator) hasAnyController() bool {
-	if len(c.podRegisters) != 0 || len(c.deployRegisters) != 0 ||
-		len(c.nodeRegisters) != 0 || len(c.rsRegisters) != 0 ||
-		len(c.daemonSetRegisters) != 0 {
-		return true
-	}
-	return false
 }
 
 func (c *HyperpilotOperator) InitApiServer() error {

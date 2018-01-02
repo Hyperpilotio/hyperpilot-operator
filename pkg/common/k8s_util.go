@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/ghodss/yaml"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
 	"k8s.io/client-go/tools/clientcmd"
@@ -34,6 +35,18 @@ func NewK8sClient(runOutsideCluster bool) (*kubernetes.Clientset, error) {
 	}
 
 	return kubernetes.NewForConfig(config)
+}
+
+func HasDeployment(kclient *kubernetes.Clientset, namespace, deployName string) bool {
+	deployClient := kclient.ExtensionsV1beta1Client.Deployments(namespace)
+
+	_, err := deployClient.Get(deployName, metav1.GetOptions{})
+	if err != nil {
+		log.Printf("[ common ] deployment {%s} is not found ", deployName)
+		return false
+	}
+	log.Printf("[ common ] deployment {%s} is found ", deployName)
+	return true
 }
 
 func CreateDeploymentFromYamlUrl(yamlURL string) (*v1beta1.Deployment, error) {
