@@ -100,27 +100,32 @@ func (s *SingleSnapController) Init(clusterState *common.ClusterState) error {
 	}
 	deployClient := kclient.ExtensionsV1beta1Client.Deployments(hyperpilotSnapNamespace)
 
-	// build snap spec
-	deployment, err := common.CreateDeploymentFromYamlUrl(s.config.GetString("SnapTaskController.SnapDeploymentYamlURL"))
-	if err != nil {
-		log.Printf("[ SingleSnapController ] Canot read YAML file from url: %s ", err.Error())
-		return err
-	}
-	deployment.Name = hyperpilotSnapDeploymentName
-	deployment.Namespace = hyperpilotSnapNamespace
+	// create deployment if not exist
+	if !common.HasDeployment(s.K8sClient, hyperpilotSnapNamespace, hyperpilotSnapDeploymentName) {
+		log.Printf("[ SingleSnapController ] deployment {%s} is not exist, create new one", hyperpilotSnapDeploymentName)
+		// build snap spec
+		deployment, err := common.CreateDeploymentFromYamlUrl(s.config.GetString("SnapTaskController.SnapDeploymentYamlURL"))
+		if err != nil {
+			log.Printf("[ SingleSnapController ] Canot read YAML file from url: %s ", err.Error())
+			return err
+		}
+		deployment.Name = hyperpilotSnapDeploymentName
+		deployment.Namespace = hyperpilotSnapNamespace
 
-	// create snap deployment
-	_, err = deployClient.Create(deployment)
-	if err != nil {
-		log.Printf("[ SingleSnapController ] Create Snap Deployment fail: %s ", err.Error())
-		return err
+		// create snap deployment
+		_, err = deployClient.Create(deployment)
+		if err != nil {
+			log.Printf("[ SingleSnapController ] Create Snap Deployment fail: %s ", err.Error())
+			return err
+		}
 	}
 
 	// create SnapNode util deployment is available
 	for {
-		d, err := deployClient.Get(deployment.Name, metav1.GetOptions{})
+		log.Printf("[ SingleSnapController ] Chechk deployment {%s} status, and wait status become available", hyperpilotSnapDeploymentName)
+		d, err := deployClient.Get(hyperpilotSnapDeploymentName, metav1.GetOptions{})
 		if err != nil {
-			log.Printf("[ SingleSnapController ] Get deployment {%s} status fail: %s ", deployment.Name, err.Error())
+			log.Printf("[ SingleSnapController ] Get deployment {%s} status fail: %s ", hyperpilotSnapDeploymentName, err.Error())
 			return err
 		}
 
@@ -140,7 +145,6 @@ func (s *SingleSnapController) Init(clusterState *common.ClusterState) error {
 			log.Print("[ SingleSnapController ] SnapNode is creeated, Init() finished")
 			break
 		}
-		log.Printf("[ SingleSnapController ] Wait for deployment {%s} become available", hyperpilotSnapDeploymentName)
 		time.Sleep(5 * time.Second)
 	}
 
@@ -174,7 +178,7 @@ func (s *SingleSnapController) isAppSetChanged(appResps []AppResponse) (isIdenti
 
 func (s *SingleSnapController) AppsUpdated(responses []AppResponse) {
 	if err := s.SnapNode.TaskManager.isReady(); err != nil {
-		log.Printf("[ AnalyzerPoller ] SnapNodes are not ready")
+		log.Printf("[ SingleSnapController ] SnapNodes are not ready")
 		return
 	}
 
@@ -185,9 +189,9 @@ func (s *SingleSnapController) AppsUpdated(responses []AppResponse) {
 		return
 	}
 
-	log.Printf("[ AnalyzerPoller ] registered Application Set changed")
-	log.Printf("[ AnalyzerPoller ] microservice of applications %s will be added to service list ", appToAdd.ToList())
-	log.Printf("[ AnalyzerPoller ] microservice of applications %s will be deleted from service list", appToDel.ToList())
+	log.Printf("[ SingleSnapController ] registered Application Set changed")
+	log.Printf("[ SingleSnapController ] microservice of applications %s will be added to service list ", appToAdd.ToList())
+	log.Printf("[ SingleSnapController ] microservice of applications %s will be deleted from service list", appToDel.ToList())
 
 	for _, app := range responses {
 		for _, svc := range app.Microservices {
@@ -196,14 +200,14 @@ func (s *SingleSnapController) AppsUpdated(responses []AppResponse) {
 			case "Deployment":
 				hash, err := s.ClusterState.FindReplicaSetHash(svc.Name)
 				if err != nil {
-					log.Printf("[ AnalyzerPoller ] pod-template-hash is not found for deployment {%s}", svc.Name)
+					log.Printf("[ SingleSnapController ] pod-template-hash is not found for deployment {%s}", svc.Name)
 					continue
 				}
 				pods = s.ClusterState.FindDeploymentPod(svc.Namespace, svc.Name, hash)
 			case "StatefulSet":
 				pods = s.ClusterState.FindStatefulSetPod(svc.Namespace, svc.Name)
 			default:
-				log.Printf("[ AnalyzerPoller ] Not supported service kind {%s}", svc.Kind)
+				log.Printf("[ SingleSnapController ] Not supported service kind {%s}", svc.Kind)
 				continue
 			}
 
@@ -211,7 +215,7 @@ func (s *SingleSnapController) AppsUpdated(responses []AppResponse) {
 				s.ServiceList.add(app.AppId, svc.Name)
 				snapNode := s.SnapNode
 				for _, p := range pods {
-					log.Printf("[ AnalyzerPoller ] add Running Service Pod {%s} in Node {%s}. ", p.Name, snapNode.NodeId)
+					log.Printf("[ SingleSnapController ] add Running Service Pod {%s} in Node {%s}. ", p.Name, snapNode.NodeId)
 					container := p.Spec.Containers[0]
 					if ok := snapNode.RunningServicePods.find(p.Name); !ok {
 						snapNode.RunningServicePods.addPodInfo(p.Name, ServicePodInfo{
@@ -226,7 +230,7 @@ func (s *SingleSnapController) AppsUpdated(responses []AppResponse) {
 				s.ServiceList.deleteWholeApp(app.AppId)
 				snapNode := s.SnapNode
 				for _, p := range pods {
-					log.Printf("[ AnalyzerPoller ] delete Running Service Pod {%s} in Node {%s}. ", p.Name, snapNode.NodeId)
+					log.Printf("[ SingleSnapController ] delete Running Service Pod {%s} in Node {%s}. ", p.Name, snapNode.NodeId)
 					snapNode.RunningServicePods.delPodInfo(p.Name)
 				}
 			}
@@ -311,7 +315,7 @@ func (s *SingleSnapController) ProcessPod(e *common.PodEvent) {
 				s.SnapNode = newNode
 				go func() {
 					if err := s.SnapNode.initSingleSnap(s.isOutsideCluster(), e.Cur, s.ClusterState); err != nil {
-						log.Printf("[ SingleSnapController ] Create new SnapNode ")
+						log.Printf("[ SingleSnapController ] Create new SnapNode fail")
 					}
 				}()
 			}
