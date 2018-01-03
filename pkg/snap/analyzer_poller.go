@@ -44,6 +44,7 @@ func NewAnalyzerPoller(config *viper.Viper, handler AnalyzerPollHandler, pollInt
 		config:       config,
 		handler:      handler,
 		pollInterval: pollInterval,
+		maxInterval:  maxInterval,
 	}
 
 	go poller.run()
@@ -52,14 +53,17 @@ func NewAnalyzerPoller(config *viper.Viper, handler AnalyzerPollHandler, pollInt
 }
 
 func (analyzerPoller *AnalyzerPoller) run() {
-	log.Printf("Starting analyzer poller with interval %s and max %s", analyzerPoller.pollInterval.String(), analyzerPoller.maxInterval.String())
 	b := backoff.NewExponentialBackOff()
 	b.MaxInterval = analyzerPoller.maxInterval
 	b.InitialInterval = analyzerPoller.pollInterval
 	b.MaxElapsedTime = 0
-	err := backoff.Retry(analyzerPoller.poll, b)
-	if err != nil {
-		log.Printf("[ AnalyzerPoller ] Polling to Analyzer exited from backoff: " + err.Error())
+	log.Printf("Starting analyzer poller with interval %s and max %s", analyzerPoller.pollInterval.String(), analyzerPoller.maxInterval.String())
+	for {
+		err := backoff.Retry(analyzerPoller.poll, b)
+		if err != nil {
+			log.Printf("[ AnalyzerPoller ] Polling to Analyzer exited from backoff: " + err.Error())
+		}
+		time.Sleep(analyzerPoller.pollInterval)
 	}
 }
 
