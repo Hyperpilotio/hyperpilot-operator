@@ -82,7 +82,7 @@ func (s *SnapTaskController) Init(clusterState *common.ClusterState) error {
 	log.Print("[ SnapTaskController ] Init() Finished.")
 	if s.config.GetBool("SnapTaskController.Analyzer.Enable") {
 		log.Printf("[ SnapTaskController ] Poll Analyzer is enabled")
-		s.analyzerPoller = NewAnalyzerPoller(s.config, s, 3*time.Second)
+		s.analyzerPoller = NewAnalyzerPoller(s.config, s, 10*time.Second, 3*time.Minute)
 	}
 
 	return nil

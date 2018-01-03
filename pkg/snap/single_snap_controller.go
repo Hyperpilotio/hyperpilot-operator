@@ -150,7 +150,7 @@ func (s *SingleSnapController) Init(clusterState *common.ClusterState) error {
 
 	if s.config.GetBool("SnapTaskController.Analyzer.Enable") {
 		log.Printf("[ SnapTaskController ] Poll Analyzer flag is enabled, launch goroutin to poll analyzer")
-		s.analyzerPoller = NewAnalyzerPoller(s.config, s, 1*time.Minute)
+		s.analyzerPoller = NewAnalyzerPoller(s.config, s, 10*time.Second, 3*time.Minute)
 	}
 
 	return nil

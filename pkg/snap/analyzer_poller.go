@@ -24,6 +24,7 @@ type AnalyzerPoller struct {
 	config       *viper.Viper
 	handler      AnalyzerPollHandler
 	pollInterval time.Duration
+	maxInterval  time.Duration
 }
 
 type AppResponse struct {
@@ -38,7 +39,7 @@ type AppResponses struct {
 	Data []AppResponse `json:"data"`
 }
 
-func NewAnalyzerPoller(config *viper.Viper, handler AnalyzerPollHandler, pollInterval time.Duration) *AnalyzerPoller {
+func NewAnalyzerPoller(config *viper.Viper, handler AnalyzerPollHandler, pollInterval time.Duration, maxInterval time.Duration) *AnalyzerPoller {
 	poller := &AnalyzerPoller{
 		config:       config,
 		handler:      handler,
@@ -51,17 +52,14 @@ func NewAnalyzerPoller(config *viper.Viper, handler AnalyzerPollHandler, pollInt
 }
 
 func (analyzerPoller *AnalyzerPoller) run() {
-	tick := time.Tick(analyzerPoller.pollInterval)
-	for {
-		select {
-		case <-tick:
-			b := backoff.NewExponentialBackOff()
-			b.MaxElapsedTime = 1 * time.Minute
-			err := backoff.Retry(analyzerPoller.poll, b)
-			if err != nil {
-				log.Printf("[ AnalyzerPoller ] Polling to Analyzer fail after Retry: %s", err.Error())
-			}
-		}
+	log.Printf("Starting analyzer poller with interval %s and max %s", analyzerPoller.pollInterval.String(), analyzerPoller.maxInterval.String())
+	b := backoff.NewExponentialBackOff()
+	b.MaxInterval = analyzerPoller.maxInterval
+	b.InitialInterval = analyzerPoller.pollInterval
+	b.MaxElapsedTime = 0
+	err := backoff.Retry(analyzerPoller.poll, b)
+	if err != nil {
+		log.Printf("[ AnalyzerPoller ] Polling to Analyzer exited from backoff: " + err.Error())
 	}
 }
 
