@@ -82,7 +82,6 @@ func (analyzerPoller *AnalyzerPoller) poll() error {
 		return err
 	}
 
-	log.Printf("Polled analyzer successfully")
 	analyzerPoller.handler.AppsUpdated(appResp.Data)
 
 	return nil
