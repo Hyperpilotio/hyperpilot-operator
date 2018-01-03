@@ -5,7 +5,7 @@ VERSION := latest
 TEST_IMAGE := ogre0403/$(OPERATOR_NAME)
 TEST_VERSION := $(shell date +%Y%m%d%H%M)
 
-.PHONY: install_deps build build-image
+.PHONY: install_deps build build-ubuntu-image
 
 install_deps:
 	glide install
@@ -21,8 +21,13 @@ build-in-docker:
 clean:
 	rm -rf bin/*
 
-build-image:
-	docker build -t $(IMAGE):$(VERSION) .
+build-alpine-image:
+	docker build -t $(IMAGE):$(VERSION)-alpine -f ./dockerfiles/alpine/Dockerfile .
+
+build-ubuntu-image:
+	docker build -t $(IMAGE):$(VERSION)-ubuntu -f ./dockerfiles/ubuntu/Dockerfile .
 
 build-test-image:
-	docker build -t $(TEST_IMAGE):$(TEST_VERSION) .
+	docker build -t $(TEST_IMAGE):$(TEST_VERSION) -f ./dockerfiles/ubuntu/Dockerfile .
+
+

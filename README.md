@@ -2,7 +2,7 @@
 
 ## Development
 ### Build Docker Image
-`make build-image`
+`make build-ubuntu-image`
 
 ### Build standalone operator
 `make install_deps; make build`
@@ -47,4 +47,4 @@
 
   Overwrite Operator.LoadedControllers
 
-  `usage: HP_CONTROLLERS=SingleSnapController,NodeSpecController,SnapTaskController`
+  `usage: HP_CONTROLLERS=SingleSnapController,NodeSpecController`
