@@ -197,15 +197,21 @@ func (s *SingleSnapController) AppsUpdated(responses []AppResponse) {
 		for _, svc := range app.Microservices {
 			var pods []*v1.Pod
 			switch svc.Kind {
-			case "Deployment":
+			case "Deployment", "deployments":
 				hash, err := s.ClusterState.FindReplicaSetHash(svc.Name)
 				if err != nil {
 					log.Printf("[ SingleSnapController ] pod-template-hash is not found for deployment {%s}", svc.Name)
 					continue
 				}
 				pods = s.ClusterState.FindDeploymentPod(svc.Namespace, svc.Name, hash)
-			case "StatefulSet":
+			case "StatefulSet", "statefulsets":
 				pods = s.ClusterState.FindStatefulSetPod(svc.Namespace, svc.Name)
+			case "Service", "services":
+				// todo: keep Service in ClusterState
+				service, err := common.GetService(s.K8sClient, svc.Namespace, svc.Name)
+				if err != nil {
+					pods = s.ClusterState.FindServicePod(svc.Namespace, service)
+				}
 			default:
 				log.Printf("[ SingleSnapController ] Not supported service kind {%s}", svc.Kind)
 				continue
