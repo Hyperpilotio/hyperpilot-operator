@@ -178,7 +178,7 @@ func (s *SingleSnapController) isAppSetChanged(appResps []AppResponse) (isIdenti
 
 func (s *SingleSnapController) AppsUpdated(responses []AppResponse) {
 	if err := s.SnapNode.TaskManager.isReady(); err != nil {
-		log.Printf("[ SingleSnapController ] SnapNodes are not ready")
+		log.Printf("[ SingleSnapController ] SnapNodes are not ready, skipping update")
 		return
 	}
 
