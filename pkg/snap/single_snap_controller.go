@@ -185,7 +185,8 @@ func (s *SingleSnapController) AppsUpdated(responses []AppResponse) {
 	var appToAdd *common.StringSet
 	var appToDel *common.StringSet
 	var isIdentical bool
-	if isIdentical, appToAdd, appToDel = s.isAppSetChanged(responses); !isIdentical {
+	if isIdentical, appToAdd, appToDel = s.isAppSetChanged(responses); isIdentical {
+		log.Printf("[ SingleSnapController ] No apps changed, skipping update")
 		return
 	}
 
