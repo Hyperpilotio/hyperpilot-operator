@@ -194,54 +194,51 @@ func (s *SingleSnapController) AppsUpdated(responses []AppResponse) {
 	log.Printf("[ SingleSnapController ] microservice of applications %s will be deleted from service list", appToDel.ToList())
 
 	for _, app := range responses {
-		for _, svc := range app.Microservices {
-			var pods []*v1.Pod
-			switch svc.Kind {
-			case "Deployment", "deployments":
-				hash, err := s.ClusterState.FindReplicaSetHash(svc.Name)
-				if err != nil {
-					log.Printf("[ SingleSnapController ] pod-template-hash is not found for deployment {%s}", svc.Name)
-					continue
-				}
-				pods = s.ClusterState.FindDeploymentPod(svc.Namespace, svc.Name, hash)
-			case "StatefulSet", "statefulsets":
-				pods = s.ClusterState.FindStatefulSetPod(svc.Namespace, svc.Name)
-			case "Service", "services":
-				// todo: keep Service in ClusterState
-				service, err := common.GetService(s.K8sClient, svc.Namespace, svc.Name)
-				if err != nil {
-					pods = s.ClusterState.FindServicePod(svc.Namespace, service)
-				}
-			default:
-				log.Printf("[ SingleSnapController ] Not supported service kind {%s}", svc.Kind)
+		source := app.SLO.Source
+		if source.APMType != "prometheus" {
+			log.Printf("[ SingleSnapController ] skip adding app %s as it's APM type is not supported: %s", app.AppId, source.APMType)
+			continue
+		}
+
+		svc := source.Service
+		var pods []*v1.Pod
+		switch svc.Kind {
+		case "Deployment", "deployments":
+			hash, err := s.ClusterState.FindReplicaSetHash(svc.Name)
+			if err != nil {
+				log.Printf("[ SingleSnapController ] pod-template-hash is not found for deployment {%s}", svc.Name)
 				continue
 			}
-
-			if appToAdd.IsExist(app.AppId) {
-				s.ServiceList.add(app.AppId, svc.Name)
-				snapNode := s.SnapNode
-				for _, p := range pods {
-					log.Printf("[ SingleSnapController ] add Running Service Pod {%s} in Node {%s}. ", p.Name, snapNode.NodeId)
-					container := p.Spec.Containers[0]
-					if ok := snapNode.RunningServicePods.find(p.Name); !ok {
-						snapNode.RunningServicePods.addPodInfo(p.Name, ServicePodInfo{
-							Namespace: p.Namespace,
-							Port:      container.Ports[0].HostPort,
-						})
-					}
-				}
-			}
-
-			if appToDel.IsExist(app.AppId) {
-				s.ServiceList.deleteWholeApp(app.AppId)
-				snapNode := s.SnapNode
-				for _, p := range pods {
-					log.Printf("[ SingleSnapController ] delete Running Service Pod {%s} in Node {%s}. ", p.Name, snapNode.NodeId)
-					snapNode.RunningServicePods.delPodInfo(p.Name)
-				}
-			}
-
+			pods = s.ClusterState.FindDeploymentPod(svc.Namespace, svc.Name, hash)
+		case "StatefulSet", "statefulsets":
+			pods = s.ClusterState.FindStatefulSetPod(svc.Namespace, svc.Name)
+		default:
+			log.Printf("[ SingleSnapController ] Not supported service kind {%s}", svc.Kind)
+			continue
 		}
+
+		if appToAdd.IsExist(app.AppId) {
+			s.ServiceList.add(app.AppId, svc.Name)
+			snapNode := s.SnapNode
+			for _, p := range pods {
+				log.Printf("[ SingleSnapController ] add Running Service Pod {%s} in Node {%s}. ", p.Name, snapNode.NodeId)
+				container := p.Spec.Containers[0]
+				if ok := snapNode.RunningServicePods.find(p.Name); !ok {
+					snapNode.RunningServicePods.addPodInfo(p.Name, ServicePodInfo{
+						Namespace: p.Namespace,
+						Port:      container.Ports[0].HostPort,
+					})
+				}
+			}
+		} else if appToDel.IsExist(app.AppId) {
+			s.ServiceList.deleteWholeApp(app.AppId)
+			snapNode := s.SnapNode
+			for _, p := range pods {
+				log.Printf("[ SingleSnapController ] delete Running Service Pod {%s} in Node {%s}. ", p.Name, snapNode.NodeId)
+				snapNode.RunningServicePods.delPodInfo(p.Name)
+			}
+		}
+
 	}
 
 	s.SnapNode.reconcileSnapState()

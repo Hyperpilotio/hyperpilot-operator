@@ -29,7 +29,8 @@ type AnalyzerPoller struct {
 
 type AppResponse struct {
 	AppId         string         `json:"app_id"`
-	Microservices []MicroService `json:"microservices"`
+	Microservices []Microservice `json:"microservices"`
+	SLO           AppSLO         `json:"slo"`
 	Name          string         `json:"name"`
 	State         string         `json:"state"`
 	Type          string         `json:"type"`
