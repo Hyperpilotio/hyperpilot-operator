@@ -66,7 +66,16 @@ func (watchinglist *ServiceWatchingList) add(appID, serviceName string) {
 	if _, ok := watchinglist.watchingList[appID]; !ok {
 		watchinglist.watchingList[appID] = []string{}
 	}
-	watchinglist.watchingList[appID] = append(watchinglist.watchingList[appID], serviceName)
+
+	services := watchinglist.watchingList[appID]
+	for _, service := range services {
+		if service == serviceName {
+			log.Printf("Skip adding service %s to app %s watch list as it already exists", serviceName, appID)
+			return
+		}
+	}
+
+	watchinglist.watchingList[appID] = append(services, serviceName)
 }
 
 func (watchinglist *ServiceWatchingList) deleteWholeApp(appID string) {
