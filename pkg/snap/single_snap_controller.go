@@ -159,7 +159,7 @@ func (s *SingleSnapController) Init(clusterState *common.ClusterState) error {
 func (s *SingleSnapController) isAppSetChanged(appResps []AppResponse) (isIdentical bool, tooAddSet *common.StringSet, tooDelSet *common.StringSet) {
 	appSet := common.NewStringSet()
 	for _, app := range appResps {
-		if app.State == REGISTERED {
+		if app.State == ACTIVE {
 			appSet.Add(app.AppId)
 		}
 	}
@@ -168,12 +168,11 @@ func (s *SingleSnapController) isAppSetChanged(appResps []AppResponse) (isIdenti
 	toAddSet := appSet.Minus(s.ApplicationSet)
 
 	if appSet.IsIdentical(s.ApplicationSet) {
-		s.ApplicationSet = appSet
 		return false, toAddSet, toDelSet
-	} else {
-		s.ApplicationSet = appSet
-		return true, toAddSet, toDelSet
 	}
+
+	s.ApplicationSet = appSet
+	return true, toAddSet, toDelSet
 }
 
 func (s *SingleSnapController) AppsUpdated(responses []AppResponse) {
@@ -184,8 +183,8 @@ func (s *SingleSnapController) AppsUpdated(responses []AppResponse) {
 
 	var appToAdd *common.StringSet
 	var appToDel *common.StringSet
-	var isIdentical bool
-	if isIdentical, appToAdd, appToDel = s.isAppSetChanged(responses); isIdentical {
+	var isChanged bool
+	if isChanged, appToAdd, appToDel = s.isAppSetChanged(responses); !isChanged {
 		log.Printf("[ SingleSnapController ] No apps changed, skipping update")
 		return
 	}

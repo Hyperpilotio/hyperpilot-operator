@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	REGISTERED    = "Registered"
-	APPS_API_PATH = "/api/v1/apps?state=Active"
+	ACTIVE        = "Active"
+	APPS_API_PATH = "/api/v1/apps?state=" + ACTIVE
 )
 
 type AnalyzerPollHandler interface {

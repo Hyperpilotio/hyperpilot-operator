@@ -22,6 +22,10 @@ func (set *StringSet) Add(s string) bool {
 	return !found
 }
 
+func (set *StringSet) IsEmpty() bool {
+	return len(set.set) == 0
+}
+
 func (set *StringSet) IsExist(s string) bool {
 	_, found := set.set[s]
 	return found
