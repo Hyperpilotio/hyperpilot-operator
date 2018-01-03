@@ -205,23 +205,12 @@ func (server *APIServer) getServicePodNameList(service *v1.Service) *[]string {
 func (server *APIServer) getAllDeployment(namespace string, deployments []string) (map[string]*extv1beta1.Deployment, error) {
 	allDeployment := map[string]*extv1beta1.Deployment{}
 	for _, deploymentName := range deployments {
-		option := metav1.ListOptions{
-			FieldSelector: "metadata.name=" + deploymentName,
-		}
-		d, err := server.K8sClient.ExtensionsV1beta1Client.Deployments(namespace).List(option)
+		deploy, err := common.GetDeployment(server.K8sClient, namespace, deploymentName)
 		if err != nil {
-			log.Printf("[ APIServer ] List Deployment fail: " + err.Error())
+			log.Printf("[ APIServer ] Get Deployment {%s} in {%s} namespace fail: %s", deploymentName, namespace, err.Error())
 			return nil, err
 		}
-
-		if len(d.Items) == 0 {
-			allDeployment[deploymentName] = nil
-		} else if len(d.Items) > 1 {
-			log.Printf("[ APIServer ] Found multiple deployments {%s} in namespace {%s}", deploymentName, namespace)
-		} else {
-			r := d.Items[0]
-			allDeployment[deploymentName] = &r
-		}
+		allDeployment[deploymentName] = deploy
 	}
 	return allDeployment, nil
 }
@@ -229,23 +218,12 @@ func (server *APIServer) getAllDeployment(namespace string, deployments []string
 func (server *APIServer) getAllService(namespace string, services []string) (map[string]*v1.Service, error) {
 	allService := map[string]*v1.Service{}
 	for _, serviceName := range services {
-		option := metav1.ListOptions{
-			FieldSelector: "metadata.name=" + serviceName,
-		}
-		s, err := server.K8sClient.CoreV1Client.Services(namespace).List(option)
+		service, err := common.GetService(server.K8sClient, namespace, serviceName)
 		if err != nil {
-			log.Printf("[ APIServer ] List Service fail: " + err.Error())
+			log.Printf("[ APIServer ] Get Service {%s} in {%s} namespace fail: %s", serviceName, namespace, err.Error())
 			return nil, err
 		}
-
-		if len(s.Items) == 0 {
-			allService[serviceName] = nil
-		} else if len(s.Items) > 1 {
-			log.Printf("[ APIServer ] Found multiple Services {%s} in namespace {%s}", serviceName, namespace)
-		} else {
-			r := s.Items[0]
-			allService[serviceName] = &r
-		}
+		allService[serviceName] = service
 	}
 	return allService, nil
 }
@@ -253,23 +231,12 @@ func (server *APIServer) getAllService(namespace string, services []string) (map
 func (server *APIServer) getAllStatefulSet(namespace string, statefulset []string) (map[string]*appv1beta1.StatefulSet, error) {
 	allStatefulSet := map[string]*appv1beta1.StatefulSet{}
 	for _, statefulSetName := range statefulset {
-		option := metav1.ListOptions{
-			FieldSelector: "metadata.name=" + statefulSetName,
-		}
-		s, err := server.K8sClient.AppsV1beta1Client.StatefulSets(namespace).List(option)
+		statefulset, err := common.GetStatefuleSets(server.K8sClient, namespace, statefulSetName)
 		if err != nil {
-			log.Printf("[ APIServer ] List StatefulSet fail: " + err.Error())
+			log.Printf("[ APIServer ] Get Service {%s} in {%s} namespace fail: %s", statefulSetName, namespace, err.Error())
 			return nil, err
 		}
-
-		if len(s.Items) == 0 {
-			allStatefulSet[statefulSetName] = nil
-		} else if len(s.Items) > 1 {
-			log.Printf("[ APIServer ] Found multiple StatefulSets {%s} in namespace {%s}", statefulSetName, namespace)
-		} else {
-			r := s.Items[0]
-			allStatefulSet[statefulSetName] = &r
-		}
+		allStatefulSet[statefulSetName] = statefulset
 	}
 	return allStatefulSet, nil
 }
