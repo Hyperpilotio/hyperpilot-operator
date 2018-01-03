@@ -1,14 +1,11 @@
 {
   "plugins": {
     "influxdb": "https://github.com/intelsdi-x/snap-plugin-publisher-influxdb/releases/download/22/snap-plugin-publisher-influxdb_linux_x86_64",
-    "cpu": "https://github.com/intelsdi-x/snap-plugin-collector-cpu/releases/download/6/snap-plugin-collector-cpu_linux_x86_64",
     "snap-plugin-collector-prometheus": "https://s3.us-east-2.amazonaws.com/jimmy-hyperpilot/snap-plugin-collector-prometheus",
     "snap-average-counter-processor": "https://s3.amazonaws.com/snap-tech-demo-files/snap-average-counter-processor"
   },
   "tasks": [],
-  "configs": [
-    "https://s3.amazonaws.com/hyperpilot-snap-collectors/snap-resource-worker-2/snap-plugin-collector-prometheus-config"
-  ],
+  "configs": [],
   "configsPath": "/etc/snap-configs",
   "pluginsPath": "/opt/snap/plugins",
   "tasksPath": "/opt/snap/tasks"
