@@ -236,6 +236,7 @@ func (s *SingleSnapController) AppsUpdated(responses []AppResponse) {
 					snapNode.RunningServicePods.addPodInfo(p.Name, ServicePodInfo{
 						Namespace: p.Namespace,
 						Port:      container.Ports[0].HostPort,
+						PodIP:     p.Status.PodIP,
 					})
 				}
 			}

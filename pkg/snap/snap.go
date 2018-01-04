@@ -3,7 +3,6 @@ package snap
 import (
 	"errors"
 	"log"
-	"strconv"
 	"time"
 
 	"github.com/intelsdi-x/snap/mgmt/rest/client"
@@ -59,7 +58,7 @@ func NewPrometheusPluginsList(config *viper.Viper) []*Plugin {
 	return plugins
 }
 
-func NewPrometheusCollectorTask(podName string, namespace string, port int32, config *viper.Viper) *Task {
+func NewPrometheusCollectorTask(podName string, podInfo ServicePodInfo, config *viper.Viper) *Task {
 	runOpts := &RunOpts{
 		ScheduleType:      "simple",
 		ScheduleInterval:  "5s",
@@ -70,17 +69,17 @@ func NewPrometheusCollectorTask(podName string, namespace string, port int32, co
 	return &Task{
 		// e.g. PROMETHEUS-resource-worker-spark-9br5d
 		Name:        prometheusTaskNamePrefix + "-" + podName,
-		WorkflowMap: NewPrometheusCollectorWorkflowMap(podName, namespace, port, config),
+		WorkflowMap: NewPrometheusCollectorWorkflowMap(podInfo.buildPrometheusMetricURL(), config),
 		Opts:        runOpts,
 	}
 }
 
-func NewPrometheusCollectorWorkflowMap(podName string, namespace string, port int32, conf *viper.Viper) *wmap.WorkflowMap {
+func NewPrometheusCollectorWorkflowMap(prometheusMetricURL string, conf *viper.Viper) *wmap.WorkflowMap {
 	ns := "/hyperpilot/prometheus"
 	metrics := make(map[string]int)
 	metrics["/hyperpilot/prometheus/"] = 1
 	config := make(map[string]interface{})
-	config["endpoint"] = "http://" + podName + "." + namespace + ":" + strconv.Itoa(int(port))
+	config["endpoint"] = prometheusMetricURL
 	collector := NewCollector(ns, metrics, config)
 
 	// create influx publisher

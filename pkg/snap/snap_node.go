@@ -2,6 +2,7 @@ package snap
 
 import (
 	"log"
+	"strconv"
 	"sync"
 
 	"github.com/hyperpilotio/hyperpilot-operator/pkg/common"
@@ -12,6 +13,11 @@ import (
 type ServicePodInfo struct {
 	Namespace string
 	Port      int32
+	PodIP     string
+}
+
+func (s *ServicePodInfo) buildPrometheusMetricURL() string {
+	return "http://" + s.PodIP + ":" + strconv.Itoa(int(s.Port))
 }
 
 type RunningServiceList struct {
@@ -101,7 +107,7 @@ func (snapTask *SnapTaskList) createTask(servicePodName string, podInfo ServiceP
 	n := snapTask.SnapNode
 	_, ok := snapTask.SnapTasks[servicePodName]
 	if !ok {
-		task := NewPrometheusCollectorTask(servicePodName, podInfo.Namespace, podInfo.Port, n.config)
+		task := NewPrometheusCollectorTask(servicePodName, podInfo, n.config)
 		_, err := n.TaskManager.CreateTask(task, n.config)
 		if err != nil {
 			log.Printf("[ SnapTaskList ] Create task in Node {%s} fail: %s", n.NodeId, err.Error())
@@ -231,6 +237,7 @@ func (n *SnapNode) initSingleSnap(isOutsideCluster bool, snapPod *v1.Pod, cluste
 				n.RunningServicePods.addPodInfo(p.Name, ServicePodInfo{
 					Namespace: p.Namespace,
 					Port:      container.Ports[0].HostPort,
+					PodIP:     p.Status.PodIP,
 				})
 			}
 		}
@@ -283,6 +290,7 @@ func (n *SnapNode) initSnap(isOutsideCluster bool, snapPod *v1.Pod, clusterState
 				n.RunningServicePods.addPodInfo(p.Name, ServicePodInfo{
 					Namespace: p.Namespace,
 					Port:      container.Ports[0].HostPort,
+					PodIP:     p.Status.PodIP,
 				})
 			}
 		}
@@ -322,6 +330,7 @@ func (n *SnapNode) Run(isOutsideCluster bool) {
 					n.RunningServicePods.addPodInfo(e.Cur.Name, ServicePodInfo{
 						Namespace: e.Cur.Namespace,
 						Port:      container.Ports[0].HostPort,
+						PodIP:     e.Cur.Status.PodIP,
 					})
 					if err := n.reconcileSnapState(); err != nil {
 						log.Printf("[ SnapNode ] Unable to reconcile snap state: %s", err.Error())
