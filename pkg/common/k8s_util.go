@@ -2,14 +2,17 @@ package common
 
 import (
 	"encoding/json"
+	"errors"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/ghodss/yaml"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/api/v1"
 	appv1beta1 "k8s.io/client-go/pkg/apis/apps/v1beta1"
@@ -49,6 +52,55 @@ func HasDeployment(kclient *kubernetes.Clientset, namespace, deployName string) 
 		return false
 	}
 	log.Printf("[ common ] deployment {%s} is found ", deployName)
+	return true
+}
+
+func CreateService(kclient *kubernetes.Clientset, namespace, serviceName string, ports []int32) error {
+	serviceClient := kclient.CoreV1Client.Services(namespace)
+	labels := map[string]string{}
+	labels["app"] = "hyperpilot-snap"
+
+	servicePorts := []v1.ServicePort{}
+	for i, port := range ports {
+		newPort := v1.ServicePort{
+			Port:       port,
+			TargetPort: intstr.FromInt(int(port)),
+			Name:       "port" + strconv.Itoa(i),
+		}
+		servicePorts = append(servicePorts, newPort)
+	}
+
+	internalService := &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      serviceName,
+			Labels:    labels,
+			Namespace: namespace,
+		},
+		Spec: v1.ServiceSpec{
+			Type:      v1.ServiceTypeClusterIP,
+			ClusterIP: "",
+			Ports:     servicePorts,
+			Selector:  labels,
+		},
+	}
+
+	if _, err := serviceClient.Create(internalService); err != nil {
+		return errors.New("Unable to create service: " + err.Error())
+	}
+
+	return nil
+}
+
+func HasService(kclient *kubernetes.Clientset, namespace, serviceName string) bool {
+	serviceClient := kclient.CoreV1Client.Services(namespace)
+
+	_, err := serviceClient.Get(serviceName, metav1.GetOptions{})
+	if err != nil {
+		log.Printf("[ common ] service {%s} is not found ", serviceName)
+		return false
+	}
+
+	log.Printf("[ common ] service {%s} is found ", serviceName)
 	return true
 }
 

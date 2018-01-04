@@ -109,6 +109,12 @@ func (s *SingleSnapController) Init(clusterState *common.ClusterState) error {
 	}
 	deployClient := kclient.ExtensionsV1beta1Client.Deployments(hyperpilotSnapNamespace)
 
+	if !common.HasService(s.K8sClient, hyperpilotSnapNamespace, hyperpilotSnapDeploymentName) {
+		if err := common.CreateService(s.K8sClient, hyperpilotSnapNamespace, hyperpilotSnapDeploymentName, []int32{int32(8181)}); err != nil {
+			return errors.New("Unable to create service for hyperpilot snap: " + err.Error())
+		}
+	}
+
 	// create deployment if not exist
 	if !common.HasDeployment(s.K8sClient, hyperpilotSnapNamespace, hyperpilotSnapDeploymentName) {
 		log.Printf("[ SingleSnapController ] deployment {%s} is not exist, create new one", hyperpilotSnapDeploymentName)
@@ -255,44 +261,12 @@ func (s *SingleSnapController) AppsUpdated(responses []AppResponse) {
 }
 
 func (s *SingleSnapController) createSnapNode() error {
-	replicaClient := s.K8sClient.ExtensionsV1beta1Client.ReplicaSets(hyperpilotSnapNamespace)
-	replicaList, err := replicaClient.List(metav1.ListOptions{})
-	if err != nil {
-		log.Printf("[ SingleSnapController ] List replicaSet fail: %s", err.Error())
-		return err
-	}
-
-	hash := ""
-	for _, replicaSet := range replicaList.Items {
-		for _, ref := range replicaSet.OwnerReferences {
-			if ref.Kind == "Deployment" && ref.Name == hyperpilotSnapDeploymentName {
-				hash = replicaSet.ObjectMeta.Labels["pod-template-hash"]
-			}
-		}
-	}
-	if hash == "" {
-		return errors.New(fmt.Sprintf("pod-template-hash label is not found for Deployment {%s}", hyperpilotSnapDeploymentName))
-	}
-
-	podClient := s.K8sClient.CoreV1Client.Pods(hyperpilotSnapNamespace)
-	pods, err := podClient.List(metav1.ListOptions{
-		LabelSelector: "pod-template-hash=" + hash,
-	})
-
-	if err != nil {
-		log.Printf("[ SingleSnapController ] List Pod with Label pod-template-hash=%s fail: %s", hash, err.Error())
-		return err
-	}
-
-	if len(pods.Items) == 0 {
-		return errors.New(fmt.Sprintf("[ SingleSnapController ] can't find Pod with Label pod-template-hash=%s", hash))
-	}
-	nodeName := pods.Items[0].Spec.NodeName
-	s.SnapNode = NewSnapNode(nodeName, s.ClusterState.Nodes[nodeName].ExternalIP, s.ServiceList, s.config)
-	if err := s.SnapNode.initSingleSnap(s.isOutsideCluster(), &pods.Items[0], s.ClusterState); err != nil {
+	s.SnapNode = NewSnapNode(hyperpilotSnapDeploymentName, hyperpilotSnapDeploymentName, s.ServiceList, s.config)
+	if err := s.SnapNode.initSingleSnap(s.ClusterState); err != nil {
 		log.Printf("[ SingleSnapController ] SnapNode Init fail : %s", err.Error())
 		return err
 	}
+
 	return nil
 }
 
@@ -327,8 +301,8 @@ func (s *SingleSnapController) ProcessPod(e *common.PodEvent) {
 				newNode := NewSnapNode(nodeName, s.ClusterState.Nodes[nodeName].ExternalIP, s.ServiceList, s.config)
 				s.SnapNode = newNode
 				go func() {
-					if err := s.SnapNode.initSingleSnap(s.isOutsideCluster(), e.Cur, s.ClusterState); err != nil {
-						log.Printf("[ SingleSnapController ] Create new SnapNode fail")
+					if err := s.SnapNode.initSingleSnap(s.ClusterState); err != nil {
+						log.Printf("[ SingleSnapController ] Create new SnapNode fail: " + err.Error())
 					}
 				}()
 			}

@@ -39,8 +39,8 @@ type Task struct {
 	Opts        *RunOpts
 }
 
-func NewTaskManager(podIP string, config *viper.Viper) (*TaskManager, error) {
-	url := "http://" + podIP + ":8181"
+func NewTaskManager(taskManagerHost string, config *viper.Viper) (*TaskManager, error) {
+	url := "http://" + taskManagerHost + ":8181"
 	snapClient, err := client.New(url, snapVersion, true)
 	if err != nil {
 		return nil, errors.New("Unable to create snap client: " + err.Error())

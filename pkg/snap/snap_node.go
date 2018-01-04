@@ -153,7 +153,7 @@ func (snapTask *SnapTaskList) reconcile() error {
 
 type SnapNode struct {
 	NodeId             string
-	ExternalIP         string
+	Host               string
 	TaskManager        *TaskManager
 	SnapTasks          *SnapTaskList
 	RunningServicePods *RunningServiceList
@@ -163,10 +163,10 @@ type SnapNode struct {
 	config             *viper.Viper
 }
 
-func NewSnapNode(nodeName string, externalIp string, serviceList *ServiceWatchingList, config *viper.Viper) *SnapNode {
+func NewSnapNode(nodeName string, host string, serviceList *ServiceWatchingList, config *viper.Viper) *SnapNode {
 	snapNode := &SnapNode{
 		NodeId:      nodeName,
-		ExternalIP:  externalIp,
+		Host:        host,
 		TaskManager: nil,
 		PodEvents:   make(chan *common.PodEvent, 1000),
 		ExitChan:    make(chan bool, 1),
@@ -196,14 +196,10 @@ func (n *SnapNode) init(isOutsideCluster bool, clusterState *common.ClusterState
 	return false, nil
 }
 
-func (n *SnapNode) initSingleSnap(isOutsideCluster bool, snapPod *v1.Pod, clusterState *common.ClusterState) error {
+func (n *SnapNode) initSingleSnap(clusterState *common.ClusterState) error {
 	var taskManager *TaskManager
 	var err error
-	if isOutsideCluster {
-		taskManager, err = NewTaskManager(n.ExternalIP, n.config)
-	} else {
-		taskManager, err = NewTaskManager(snapPod.Status.PodIP, n.config)
-	}
+	taskManager, err = NewTaskManager(n.Host, n.config)
 
 	if err != nil {
 		log.Printf("Failed to create Snap Task Manager: " + err.Error())
@@ -218,7 +214,7 @@ func (n *SnapNode) initSingleSnap(isOutsideCluster bool, snapPod *v1.Pod, cluste
 		log.Printf("Failed to create Snap Task Manager in Node {%s}: {%s}", n.NodeId, err.Error())
 		return err
 	}
-	log.Printf("[ SnapNode ] {%s} Loads Plugin  Complete", n.NodeId)
+	log.Printf("[ SnapNode ] {%s} Load plugins completed", n.NodeId)
 
 	tasks := n.TaskManager.GetTasks()
 	for _, task := range tasks.ScheduledTasks {
@@ -245,7 +241,7 @@ func (n *SnapNode) initSingleSnap(isOutsideCluster bool, snapPod *v1.Pod, cluste
 	clusterState.Lock.RUnlock()
 
 	n.reconcileSnapState()
-	n.Run(isOutsideCluster)
+	n.Run()
 	return nil
 }
 
@@ -253,7 +249,7 @@ func (n *SnapNode) initSnap(isOutsideCluster bool, snapPod *v1.Pod, clusterState
 	var taskManager *TaskManager
 	var err error
 	if isOutsideCluster {
-		taskManager, err = NewTaskManager(n.ExternalIP, n.config)
+		taskManager, err = NewTaskManager(n.Host, n.config)
 	} else {
 		taskManager, err = NewTaskManager(snapPod.Status.PodIP, n.config)
 	}
@@ -298,7 +294,7 @@ func (n *SnapNode) initSnap(isOutsideCluster bool, snapPod *v1.Pod, clusterState
 	clusterState.Lock.RUnlock()
 
 	n.reconcileSnapState()
-	n.Run(isOutsideCluster)
+	n.Run()
 	return nil
 }
 
@@ -316,7 +312,7 @@ func (n *SnapNode) reconcileSnapState() error {
 	return nil
 }
 
-func (n *SnapNode) Run(isOutsideCluster bool) {
+func (n *SnapNode) Run() {
 	go func() {
 		for {
 			select {
