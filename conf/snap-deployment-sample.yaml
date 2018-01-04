@@ -2,24 +2,24 @@ apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
   labels:
-    app: snap
+    app: hyperpilot-snap
     version: latest
   name: hyperpilot-snap
   namespace: hyperpilot
 spec:
   selector:
     matchLabels:
-      app: snap
+      app: hyperpilot-snap
       version: latest
   template:
     metadata:
       labels:
-        app: snap
+        app: hyperpilot-snap
         version: latest
     spec:
       containers:
       - image: hyperpilot/snap:xenial
-        name: snap
+        name: hyperpilot-snap
         command:
         - "/usr/local/bin/run.sh"
         args:
