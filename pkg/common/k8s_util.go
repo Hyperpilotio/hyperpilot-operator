@@ -83,64 +83,46 @@ func CreateDeploymentFromYamlUrl(yamlURL string) (*v1beta1.Deployment, error) {
 }
 
 func GetService(K8sClient *kubernetes.Clientset, namespace, serviceName string) (*v1.Service, error) {
-	option := metav1.ListOptions{
-		FieldSelector: "metadata.name=" + serviceName,
+	s, err := K8sClient.CoreV1Client.Services(namespace).Get(serviceName, metav1.GetOptions{})
+	if err != nil {
+		log.Printf("[ APIServer ] Get Service fail: " + err.Error())
+		return nil, err
 	}
+	return s, nil
+}
+
+func ListServices(K8sClient *kubernetes.Clientset, namespace string) ([]v1.Service, error) {
+	option := metav1.ListOptions{}
 	s, err := K8sClient.CoreV1Client.Services(namespace).List(option)
 	if err != nil {
 		log.Printf("[ APIServer ] List Service fail: " + err.Error())
 		return nil, err
 	}
-
-	if len(s.Items) == 0 {
-		return nil, nil
-	}
-
-	if len(s.Items) > 1 {
-		log.Printf("[ APIServer ] Found multiple Services {%s} in namespace {%s}", serviceName, namespace)
-	}
-	r := s.Items[0]
-	return &r, nil
+	return s.Items, nil
 }
 
 func GetDeployment(K8sClient *kubernetes.Clientset, namespace, deploymentName string) (*extv1beta1.Deployment, error) {
-	option := metav1.ListOptions{
-		FieldSelector: "metadata.name=" + deploymentName,
-	}
-	d, err := K8sClient.ExtensionsV1beta1Client.Deployments(namespace).List(option)
+	d, err := K8sClient.ExtensionsV1beta1Client.Deployments(namespace).Get(deploymentName, metav1.GetOptions{})
 	if err != nil {
-		log.Printf("[ APIServer ] List Deployment fail: " + err.Error())
+		log.Printf("[ APIServer ] Get Deployment fail: " + err.Error())
 		return nil, err
 	}
+	return d, nil
+}
 
-	if len(d.Items) == 0 {
-		return nil, nil
-	}
-	if len(d.Items) > 1 {
-		log.Printf("[ APIServer ] Found multiple deployments {%s} in namespace {%s}", deploymentName, namespace)
-	}
-	r := d.Items[0]
-	return &r, nil
-
+func ListDeployments() ([]*extv1beta1.Deployment, error) {
+	return nil, nil
 }
 
 func GetStatefuleSets(K8sClient *kubernetes.Clientset, namespace, statefulSetName string) (*appv1beta1.StatefulSet, error) {
-	option := metav1.ListOptions{
-		FieldSelector: "metadata.name=" + statefulSetName,
-	}
-	s, err := K8sClient.AppsV1beta1Client.StatefulSets(namespace).List(option)
+	s, err := K8sClient.AppsV1beta1Client.StatefulSets(namespace).Get(statefulSetName, metav1.GetOptions{})
 	if err != nil {
-		log.Printf("[ APIServer ] List StatefulSet fail: " + err.Error())
+		log.Printf("[ APIServer ] Get StatefulSet fail: " + err.Error())
 		return nil, err
 	}
+	return s, nil
+}
 
-	if len(s.Items) == 0 {
-		return nil, nil
-	}
-	if len(s.Items) > 1 {
-		log.Printf("[ APIServer ] Found multiple StatefulSets {%s} in namespace {%s}", statefulSetName, namespace)
-	}
-	r := s.Items[0]
-	return &r, nil
-
+func ListStatefuleSets() ([]*appv1beta1.StatefulSet, error) {
+	return nil, nil
 }

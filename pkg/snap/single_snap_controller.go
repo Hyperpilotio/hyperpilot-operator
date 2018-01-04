@@ -231,12 +231,13 @@ func (s *SingleSnapController) AppsUpdated(responses []AppResponse) {
 			snapNode := s.SnapNode
 			for _, p := range pods {
 				log.Printf("[ SingleSnapController ] add Running Service Pod {%s} in Node {%s}. ", p.Name, snapNode.NodeId)
-				container := p.Spec.Containers[0]
 				if ok := snapNode.RunningServicePods.find(p.Name); !ok {
-					snapNode.RunningServicePods.addPodInfo(p.Name, ServicePodInfo{
-						Namespace: p.Namespace,
-						Port:      container.Ports[0].HostPort,
-					})
+					podInfo, err := NewServicePodInfo(p, s.K8sClient)
+					if err != nil {
+						log.Printf("[ SingleSnapController ] Failed to create ServicePodInfo: %s", err.Error())
+						return
+					}
+					snapNode.RunningServicePods.addPodInfo(p.Name, podInfo)
 				}
 			}
 		} else if appToDel.IsExist(app.AppId) {
@@ -287,7 +288,7 @@ func (s *SingleSnapController) createSnapNode() error {
 		return errors.New(fmt.Sprintf("[ SingleSnapController ] can't find Pod with Label pod-template-hash=%s", hash))
 	}
 	nodeName := pods.Items[0].Spec.NodeName
-	s.SnapNode = NewSnapNode(nodeName, s.ClusterState.Nodes[nodeName].ExternalIP, s.ServiceList, s.config)
+	s.SnapNode = NewSnapNode(nodeName, s.ClusterState.Nodes[nodeName].ExternalIP, s.ServiceList, s.config, s.K8sClient)
 	if err := s.SnapNode.initSingleSnap(s.isOutsideCluster(), &pods.Items[0], s.ClusterState); err != nil {
 		log.Printf("[ SingleSnapController ] SnapNode Init fail : %s", err.Error())
 		return err
@@ -323,7 +324,7 @@ func (s *SingleSnapController) ProcessPod(e *common.PodEvent) {
 				if s.SnapNode != nil {
 					s.DeletingSnapNode = s.SnapNode
 				}
-				newNode := NewSnapNode(nodeName, s.ClusterState.Nodes[nodeName].ExternalIP, s.ServiceList, s.config)
+				newNode := NewSnapNode(nodeName, s.ClusterState.Nodes[nodeName].ExternalIP, s.ServiceList, s.config, s.K8sClient)
 				s.SnapNode = newNode
 				go func() {
 					if err := s.SnapNode.initSingleSnap(s.isOutsideCluster(), e.Cur, s.ClusterState); err != nil {

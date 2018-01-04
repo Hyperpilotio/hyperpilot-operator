@@ -4,26 +4,105 @@ import (
 	"log"
 	"sync"
 
+	"encoding/json"
+	"fmt"
 	"github.com/hyperpilotio/hyperpilot-operator/pkg/common"
+	"github.com/pkg/errors"
 	"github.com/spf13/viper"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/api/v1"
+	"strconv"
+	"strings"
 )
 
+type CreatedByAnnotation struct {
+	Kind       string
+	ApiVersion string
+	Reference  struct {
+		Kind            string
+		Namespace       string
+		Name            string
+		Uid             string
+		ApiVersion      string
+		ResourceVersion string
+	}
+}
+
 type ServicePodInfo struct {
-	Namespace string
-	Port      int32
+	Namespace          string
+	Port               int32
+	ParentResourceKind string
+	ParentResourceName string
+	Service            string
+	PodName            string
+}
+
+func (servicePod *ServicePodInfo) buildPrometheusMetricURL() (string, error) {
+	switch servicePod.ParentResourceKind {
+	case "StatefulSet":
+		return fmt.Sprintf("http://%s.%s.%s.svc.cluster.local:%s",
+			servicePod.PodName, servicePod.ParentResourceName, servicePod.Namespace,
+			strconv.Itoa(int(servicePod.Port))), nil
+	case "ReplicaSet":
+		// todo: better way to match deployment
+		return fmt.Sprintf("http://%s.%s:%s",
+			servicePod.PodName, servicePod.Namespace, strconv.Itoa(int(servicePod.Port))), nil
+	default:
+		return "", errors.New(fmt.Sprintf("[ ServicePodInfo ] Can't build Prometheus Metric URL, It's not supported Kind type {%s}", servicePod.ParentResourceKind))
+	}
+}
+
+func NewServicePodInfo(pod *v1.Pod, k8sClient *kubernetes.Clientset) (*ServicePodInfo, error) {
+
+	var createdMeta CreatedByAnnotation
+	err := json.Unmarshal([]byte(pod.ObjectMeta.Annotations["kubernetes.io/created-by"]), &createdMeta)
+	if err != nil {
+		log.Printf("[ ServicePodInfo ] Can't unmarshal Pod annotation")
+		return nil, err
+	}
+
+	services, err := common.ListServices(k8sClient, pod.Namespace)
+	if err != nil {
+		log.Printf("[ ServicePodInfo ] Can't get all service in namespace {%s}: %s", pod.Namespace, err.Error())
+		return nil, err
+	}
+
+	container := pod.Spec.Containers[0]
+	podInfo := &ServicePodInfo{
+		Namespace:          pod.Namespace,
+		Port:               container.Ports[0].HostPort,
+		ParentResourceKind: createdMeta.Reference.Kind,
+		ParentResourceName: createdMeta.Reference.Name,
+		PodName:            pod.Name,
+	}
+
+	// todo: multiple service match one pod ?
+	for _, service := range services {
+		serviceSelector := labels.Set(service.Spec.Selector).AsSelector()
+		// todo: check if kubernetes Service match any Pod
+		if serviceSelector.Matches(labels.Set(pod.Labels)) && service.Name != "kubernetes" {
+			podInfo.Service = service.Name
+			log.Printf("[ ServicePodInfo ] Found Service=%s for %s", service.Name, pod.Name)
+			return podInfo, nil
+		}
+	}
+
+	return nil, errors.New(fmt.Sprintf(
+		"[ ServicePodInfo ] Can't find Service for %s {%s} in namespace {%s}",
+		createdMeta.Reference.Kind, createdMeta.Reference.Name, pod.Namespace))
 }
 
 type RunningServiceList struct {
 	Lock               *sync.Mutex
-	RunningServicePods map[string]ServicePodInfo
+	RunningServicePods map[string]*ServicePodInfo
 	SnapNode           *SnapNode
 }
 
 func NewRunningServiceList(node *SnapNode) *RunningServiceList {
 	return &RunningServiceList{
 		Lock:               &sync.Mutex{},
-		RunningServicePods: make(map[string]ServicePodInfo),
+		RunningServicePods: make(map[string]*ServicePodInfo),
 		SnapNode:           node,
 	}
 }
@@ -48,7 +127,7 @@ func (runningService *RunningServiceList) find(servicePodName string) bool {
 	return ok
 }
 
-func (runningService *RunningServiceList) addPodInfo(name string, podInfo ServicePodInfo) {
+func (runningService *RunningServiceList) addPodInfo(name string, podInfo *ServicePodInfo) {
 	runningService.Lock.Lock()
 	defer runningService.Lock.Unlock()
 	runningService.RunningServicePods[name] = podInfo
@@ -94,15 +173,19 @@ func NewSnapTaskList(node *SnapNode) *SnapTaskList {
 	}
 }
 
-func (snapTask *SnapTaskList) createTask(servicePodName string, podInfo ServicePodInfo) error {
+func (snapTask *SnapTaskList) createTask(servicePodName string, podInfo *ServicePodInfo) error {
 	snapTask.Lock.Lock()
 	defer snapTask.Lock.Unlock()
 
 	n := snapTask.SnapNode
 	_, ok := snapTask.SnapTasks[servicePodName]
 	if !ok {
-		task := NewPrometheusCollectorTask(servicePodName, podInfo.Namespace, podInfo.Port, n.config)
-		_, err := n.TaskManager.CreateTask(task, n.config)
+		task, err := NewPrometheusCollectorTask(podInfo, n.config)
+		if err != nil {
+			log.Printf("[ SnapTaskList ] Build task fail: %s", err.Error())
+			return err
+		}
+		_, err = n.TaskManager.CreateTask(task, n.config)
 		if err != nil {
 			log.Printf("[ SnapTaskList ] Create task in Node {%s} fail: %s", n.NodeId, err.Error())
 			return err
@@ -155,9 +238,10 @@ type SnapNode struct {
 	ExitChan           chan bool
 	ServiceList        *ServiceWatchingList
 	config             *viper.Viper
+	K8sClient          *kubernetes.Clientset
 }
 
-func NewSnapNode(nodeName string, externalIp string, serviceList *ServiceWatchingList, config *viper.Viper) *SnapNode {
+func NewSnapNode(nodeName string, externalIp string, serviceList *ServiceWatchingList, config *viper.Viper, kclient *kubernetes.Clientset) *SnapNode {
 	snapNode := &SnapNode{
 		NodeId:      nodeName,
 		ExternalIP:  externalIp,
@@ -166,28 +250,13 @@ func NewSnapNode(nodeName string, externalIp string, serviceList *ServiceWatchin
 		ExitChan:    make(chan bool, 1),
 		ServiceList: serviceList,
 		config:      config,
+		K8sClient:   kclient,
 	}
 	runningServices := NewRunningServiceList(snapNode)
 	snapTasks := NewSnapTaskList(snapNode)
 	snapNode.RunningServicePods = runningServices
 	snapNode.SnapTasks = snapTasks
 	return snapNode
-}
-
-func (n *SnapNode) init(isOutsideCluster bool, clusterState *common.ClusterState) (bool, error) {
-	clusterState.Lock.RLock()
-	defer clusterState.Lock.RUnlock()
-
-	for _, p := range clusterState.Pods {
-		if n.NodeId == p.Spec.NodeName && isSnapPod(p) {
-			if err := n.initSnap(isOutsideCluster, p, clusterState); err != nil {
-				return true, err
-			}
-			return true, nil
-		}
-	}
-	log.Printf("Snap is not found in cluster for node %s during init", n.NodeId)
-	return false, nil
 }
 
 func (n *SnapNode) initSingleSnap(isOutsideCluster bool, snapPod *v1.Pod, clusterState *common.ClusterState) error {
@@ -228,62 +297,12 @@ func (n *SnapNode) initSingleSnap(isOutsideCluster bool, snapPod *v1.Pod, cluste
 			// TODO: How do we know which container has the right port? and which port?
 			container := p.Spec.Containers[0]
 			if len(container.Ports) > 0 {
-				n.RunningServicePods.addPodInfo(p.Name, ServicePodInfo{
-					Namespace: p.Namespace,
-					Port:      container.Ports[0].HostPort,
-				})
-			}
-		}
-	}
-	clusterState.Lock.RUnlock()
-
-	n.reconcileSnapState()
-	n.Run(isOutsideCluster)
-	return nil
-}
-
-func (n *SnapNode) initSnap(isOutsideCluster bool, snapPod *v1.Pod, clusterState *common.ClusterState) error {
-	var taskManager *TaskManager
-	var err error
-	if isOutsideCluster {
-		taskManager, err = NewTaskManager(n.ExternalIP, n.config)
-	} else {
-		taskManager, err = NewTaskManager(snapPod.Status.PodIP, n.config)
-	}
-
-	if err != nil {
-		log.Printf("Failed to create Snap Task Manager: " + err.Error())
-		return err
-	}
-
-	n.TaskManager = taskManager
-
-	//todo: how to initSnap if timeout
-	err = n.TaskManager.WaitForLoadPlugins(n.config.GetInt("SnapTaskController.PluginDownloadTimeoutMin"))
-	if err != nil {
-		log.Printf("Failed to create Snap Task Manager in Node {%s}: {%s}", n.NodeId, err.Error())
-		return err
-	}
-	log.Printf("[ SnapNode ] {%s} Loads Plugin  Complete", n.NodeId)
-
-	tasks := n.TaskManager.GetTasks()
-	for _, task := range tasks.ScheduledTasks {
-		if isSnapControllerTask(task.Name) {
-			servicePodName := getServicePodNameFromSnapTask(task.Name)
-			n.SnapTasks.addTaskName(servicePodName, task.Name)
-		}
-	}
-
-	clusterState.Lock.RLock()
-	for _, p := range clusterState.Pods {
-		if p.Spec.NodeName == n.NodeId && n.ServiceList.isServicePod(p) {
-			// TODO: How do we know which container has the right port? and which port?
-			container := p.Spec.Containers[0]
-			if len(container.Ports) > 0 {
-				n.RunningServicePods.addPodInfo(p.Name, ServicePodInfo{
-					Namespace: p.Namespace,
-					Port:      container.Ports[0].HostPort,
-				})
+				podInfo, err := NewServicePodInfo(p, n.K8sClient)
+				if err != nil {
+					log.Printf("[ SnapNode ] Failed to create ServicePodInfo when Init SnapNode: %s", err.Error())
+					return err
+				}
+				n.RunningServicePods.addPodInfo(p.Name, podInfo)
 			}
 		}
 	}
@@ -318,14 +337,15 @@ func (n *SnapNode) Run(isOutsideCluster bool) {
 			case e := <-n.PodEvents:
 				switch e.EventType {
 				case common.ADD, common.UPDATE:
-					container := e.Cur.Spec.Containers[0]
-					n.RunningServicePods.addPodInfo(e.Cur.Name, ServicePodInfo{
-						Namespace: e.Cur.Namespace,
-						Port:      container.Ports[0].HostPort,
-					})
+					podInfo, err := NewServicePodInfo(e.Cur, n.K8sClient)
+					if err != nil {
+						log.Printf("[ SnapNode ] Failed to create ServicePodInfo when Process event: %s", err.Error())
+						continue
+					}
+					n.RunningServicePods.addPodInfo(e.Cur.Name, podInfo)
 					if err := n.reconcileSnapState(); err != nil {
 						log.Printf("[ SnapNode ] Unable to reconcile snap state: %s", err.Error())
-						return
+						continue
 					}
 					log.Printf("[ SnapNode ] Insert Service Pod {%s}", e.Cur.Name)
 
@@ -333,7 +353,7 @@ func (n *SnapNode) Run(isOutsideCluster bool) {
 					n.RunningServicePods.delPodInfo(e.Cur.Name)
 					if err := n.reconcileSnapState(); err != nil {
 						log.Printf("[ SnapNode ] Unable to reconcile snap state: %s", err.Error())
-						return
+						continue
 					}
 				}
 			}
@@ -343,4 +363,25 @@ func (n *SnapNode) Run(isOutsideCluster bool) {
 
 func (n *SnapNode) Exit() {
 	n.ExitChan <- true
+}
+
+func isSnapControllerTask(taskName string) bool {
+	if strings.HasPrefix(taskName, prometheusTaskNamePrefix) {
+		return true
+	}
+	return false
+}
+
+func getServicePodNameFromSnapTask(taskName string) string {
+	return strings.SplitN(taskName, "-", 2)[1]
+}
+
+func getTaskIDFromTaskName(manager *TaskManager, name string) (string, error) {
+	tasks := manager.GetTasks().ScheduledTasks
+	for _, t := range tasks {
+		if t.Name == name {
+			return t.ID, nil
+		}
+	}
+	return "", errors.New("Can not find ID from Name")
 }
