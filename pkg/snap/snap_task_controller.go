@@ -214,6 +214,7 @@ func (s *SnapTaskController) updateRunningServicePods(pods []*v1.Pod) {
 			snapNode.RunningServicePods.addPodInfo(p.Name, ServicePodInfo{
 				Namespace: p.Namespace,
 				Port:      container.Ports[0].HostPort,
+				PodIP:     p.Status.PodIP,
 			})
 			log.Printf("add Running Service Pod {%s} in Node {%s}. ", p.Name, snapNode.NodeId)
 		}
