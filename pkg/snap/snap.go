@@ -40,7 +40,7 @@ type Task struct {
 }
 
 func NewTaskManager(taskManagerHost string, config *viper.Viper) (*TaskManager, error) {
-	url := "http://" + taskManagerHost + ":8181"
+	url := "http://" + taskManagerHost + ":8282"
 	snapClient, err := client.New(url, snapVersion, true)
 	if err != nil {
 		return nil, errors.New("Unable to create snap client: " + err.Error())

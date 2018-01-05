@@ -110,7 +110,8 @@ func (s *SingleSnapController) Init(clusterState *common.ClusterState) error {
 	deployClient := kclient.ExtensionsV1beta1Client.Deployments(hyperpilotSnapNamespace)
 
 	if !common.HasService(s.K8sClient, hyperpilotSnapNamespace, hyperpilotSnapDeploymentName) {
-		if err := common.CreateService(s.K8sClient, hyperpilotSnapNamespace, hyperpilotSnapDeploymentName, []int32{int32(8181)}); err != nil {
+		if err := common.CreateService(s.K8sClient, hyperpilotSnapNamespace, hyperpilotSnapDeploymentName,
+			[]int32{int32(8282)}, []int32{int32(8181)}); err != nil {
 			return errors.New("Unable to create service for hyperpilot snap: " + err.Error())
 		}
 	}
