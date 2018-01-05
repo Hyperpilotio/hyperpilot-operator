@@ -83,7 +83,7 @@ func NewPrometheusCollectorWorkflowMap(podInfo ServicePodInfo, conf *viper.Viper
 	collector := NewCollector(ns, metrics, config)
 
 	tagEntry := make(map[string]string)
-	tagEntry["app_id"] = podInfo.AppID
+	tagEntry["app_id"] = podInfo.Appid
 	tagEntry["pod_name"] = podInfo.PodName
 	tags := make(map[string]map[string]string)
 	tags[ns] = tagEntry

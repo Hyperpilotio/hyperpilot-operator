@@ -287,7 +287,7 @@ func (s *SingleSnapController) AppsUpdated(responses []AppResponse) {
 						Port:      container.Ports[0].HostPort,
 						PodIP:     p.Status.PodIP,
 						PodName:   p.Name,
-						AppID:     app.AppId,
+						Appid:     app.AppId,
 					})
 				}
 			}
