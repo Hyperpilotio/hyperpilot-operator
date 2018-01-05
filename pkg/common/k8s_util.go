@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 
 	"github.com/ghodss/yaml"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -55,17 +54,16 @@ func HasDeployment(kclient *kubernetes.Clientset, namespace, deployName string) 
 	return true
 }
 
-func CreateService(kclient *kubernetes.Clientset, namespace, serviceName string, ports []int32) error {
+func CreateService(kclient *kubernetes.Clientset, namespace, serviceName string, serviceType v1.ServiceType, ports []int32, targetPort []int32) error {
 	serviceClient := kclient.CoreV1Client.Services(namespace)
 	labels := map[string]string{}
 	labels["app"] = "hyperpilot-snap"
 
 	servicePorts := []v1.ServicePort{}
-	for i, port := range ports {
+	for i, _ := range ports {
 		newPort := v1.ServicePort{
-			Port:       port,
-			TargetPort: intstr.FromInt(int(port)),
-			Name:       "port" + strconv.Itoa(i),
+			Port:       ports[i],
+			TargetPort: intstr.FromInt(int(targetPort[i])),
 		}
 		servicePorts = append(servicePorts, newPort)
 	}
@@ -77,7 +75,7 @@ func CreateService(kclient *kubernetes.Clientset, namespace, serviceName string,
 			Namespace: namespace,
 		},
 		Spec: v1.ServiceSpec{
-			Type:      v1.ServiceTypeClusterIP,
+			Type:      serviceType,
 			ClusterIP: "",
 			Ports:     servicePorts,
 			Selector:  labels,

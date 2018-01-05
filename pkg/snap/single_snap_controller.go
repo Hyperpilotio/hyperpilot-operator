@@ -29,6 +29,7 @@ type SingleSnapController struct {
 	K8sClient        *kubernetes.Clientset
 	analyzerPoller   *AnalyzerPoller
 	ApplicationSet   *common.StringSet
+	SnapExternalIP   string
 }
 
 type ServiceWatchingList struct {
@@ -108,10 +109,38 @@ func (s *SingleSnapController) Init(clusterState *common.ClusterState) error {
 		return err
 	}
 	deployClient := kclient.ExtensionsV1beta1Client.Deployments(hyperpilotSnapNamespace)
+	serviceClient := kclient.CoreV1Client.Services(hyperpilotSnapNamespace)
 
 	if !common.HasService(s.K8sClient, hyperpilotSnapNamespace, hyperpilotSnapDeploymentName) {
-		if err := common.CreateService(s.K8sClient, hyperpilotSnapNamespace, hyperpilotSnapDeploymentName, []int32{int32(8181)}); err != nil {
+		var svcType v1.ServiceType
+		if s.isOutsideCluster() {
+			svcType = v1.ServiceTypeLoadBalancer
+		} else {
+			svcType = v1.ServiceTypeClusterIP
+		}
+		if err := common.CreateService(s.K8sClient, hyperpilotSnapNamespace, hyperpilotSnapDeploymentName,
+			svcType, []int32{int32(8181)}, []int32{int32(8181)}); err != nil {
 			return errors.New("Unable to create service for hyperpilot snap: " + err.Error())
+		}
+	}
+
+	// wait for external IP available
+	if s.isOutsideCluster() {
+		for {
+			log.Printf("[ SingleSnapController ] operator run outside cluster, wait for external IP for Snap")
+			svc, err := serviceClient.Get(hyperpilotSnapDeploymentName, metav1.GetOptions{})
+
+			if err != nil {
+				log.Printf("[ SingleSnapController ] Get Service {%s} status fail", hyperpilotSnapDeploymentName)
+				return err
+			}
+
+			if len(svc.Status.LoadBalancer.Ingress) > 0 {
+				log.Printf("[ SingleSnapController ] Obtain external IP=%s", svc.Status.LoadBalancer.Ingress[0].IP)
+				s.SnapExternalIP = svc.Status.LoadBalancer.Ingress[0].IP
+				break
+			}
+			time.Sleep(20 * time.Second)
 		}
 	}
 
@@ -236,7 +265,7 @@ func (s *SingleSnapController) AppsUpdated(responses []AppResponse) {
 			s.ServiceList.add(app.AppId, svc.Name)
 			snapNode := s.SnapNode
 			for _, p := range pods {
-				log.Printf("[ SingleSnapController ] add Running Service Pod {%s} in Node {%s}. ", p.Name, snapNode.NodeId)
+				log.Printf("[ SingleSnapController ] add Running Service Pod {%s}. ", p.Name)
 				container := p.Spec.Containers[0]
 				if ok := snapNode.RunningServicePods.find(p.Name); !ok {
 					snapNode.RunningServicePods.addPodInfo(p.Name, ServicePodInfo{
@@ -250,7 +279,7 @@ func (s *SingleSnapController) AppsUpdated(responses []AppResponse) {
 			s.ServiceList.deleteWholeApp(app.AppId)
 			snapNode := s.SnapNode
 			for _, p := range pods {
-				log.Printf("[ SingleSnapController ] delete Running Service Pod {%s} in Node {%s}. ", p.Name, snapNode.NodeId)
+				log.Printf("[ SingleSnapController ] delete Running Service Pod {%s}. ", p.Name)
 				snapNode.RunningServicePods.delPodInfo(p.Name)
 			}
 		}
@@ -261,7 +290,13 @@ func (s *SingleSnapController) AppsUpdated(responses []AppResponse) {
 }
 
 func (s *SingleSnapController) createSnapNode() error {
-	s.SnapNode = NewSnapNode(hyperpilotSnapDeploymentName, hyperpilotSnapDeploymentName, s.ServiceList, s.config)
+
+	if s.isOutsideCluster() {
+		s.SnapNode = NewSnapNode(s.SnapExternalIP, s.ServiceList, s.config)
+	} else {
+		s.SnapNode = NewSnapNode(hyperpilotSnapDeploymentName, s.ServiceList, s.config)
+	}
+
 	if err := s.SnapNode.initSingleSnap(s.ClusterState); err != nil {
 		log.Printf("[ SingleSnapController ] SnapNode Init fail : %s", err.Error())
 		return err
@@ -285,7 +320,7 @@ func (s *SingleSnapController) ProcessPod(e *common.PodEvent) {
 			return
 		}
 		if isHyperPilotSnapPod(e.Cur) {
-			log.Printf("[ SingleSnapController ] Delete SnapNode in {%s}", s.DeletingSnapNode.NodeId)
+			log.Printf("[ SingleSnapController ] SnapNode is Deleted")
 			s.DeletingSnapNode.Exit()
 		}
 		if s.ServiceList.isServicePod(e.Cur) {
@@ -293,13 +328,15 @@ func (s *SingleSnapController) ProcessPod(e *common.PodEvent) {
 		}
 	case common.ADD, common.UPDATE:
 		if e.Cur.Status.Phase == "Running" && (e.Old == nil || e.Old.Status.Phase == "Pending") {
-			nodeName := e.Cur.Spec.NodeName
 			if isHyperPilotSnapPod(e.Cur) {
 				if s.SnapNode != nil {
 					s.DeletingSnapNode = s.SnapNode
 				}
-				newNode := NewSnapNode(nodeName, s.ClusterState.Nodes[nodeName].ExternalIP, s.ServiceList, s.config)
-				s.SnapNode = newNode
+				if s.isOutsideCluster() {
+					s.SnapNode = NewSnapNode(s.SnapExternalIP, s.ServiceList, s.config)
+				} else {
+					s.SnapNode = NewSnapNode(hyperpilotSnapDeploymentName, s.ServiceList, s.config)
+				}
 				go func() {
 					if err := s.SnapNode.initSingleSnap(s.ClusterState); err != nil {
 						log.Printf("[ SingleSnapController ] Create new SnapNode fail: " + err.Error())
