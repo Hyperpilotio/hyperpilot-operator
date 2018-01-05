@@ -27,7 +27,7 @@ spec:
         imagePullPolicy: Always
         ports:
         - containerPort: 8181
-          hostPort: 8181
+          hostPort: 8282
         imagePullPolicy: Always
         securityContext:
           privileged: true
