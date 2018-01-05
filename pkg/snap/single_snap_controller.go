@@ -111,7 +111,7 @@ func (s *SingleSnapController) Init(clusterState *common.ClusterState) error {
 
 	if !common.HasService(s.K8sClient, hyperpilotSnapNamespace, hyperpilotSnapDeploymentName) {
 		if err := common.CreateService(s.K8sClient, hyperpilotSnapNamespace, hyperpilotSnapDeploymentName,
-			[]int32{int32(8282)}, []int32{int32(8181)}); err != nil {
+			[]int32{int32(8181)}, []int32{int32(8181)}); err != nil {
 			return errors.New("Unable to create service for hyperpilot snap: " + err.Error())
 		}
 	}
@@ -294,13 +294,11 @@ func (s *SingleSnapController) ProcessPod(e *common.PodEvent) {
 		}
 	case common.ADD, common.UPDATE:
 		if e.Cur.Status.Phase == "Running" && (e.Old == nil || e.Old.Status.Phase == "Pending") {
-			nodeName := e.Cur.Spec.NodeName
 			if isHyperPilotSnapPod(e.Cur) {
 				if s.SnapNode != nil {
 					s.DeletingSnapNode = s.SnapNode
 				}
-				newNode := NewSnapNode(nodeName, s.ClusterState.Nodes[nodeName].ExternalIP, s.ServiceList, s.config)
-				s.SnapNode = newNode
+				s.SnapNode = NewSnapNode(hyperpilotSnapDeploymentName, hyperpilotSnapDeploymentName, s.ServiceList, s.config)
 				go func() {
 					if err := s.SnapNode.initSingleSnap(s.ClusterState); err != nil {
 						log.Printf("[ SingleSnapController ] Create new SnapNode fail: " + err.Error())
