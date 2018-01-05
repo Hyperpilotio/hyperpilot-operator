@@ -58,7 +58,7 @@ func NewPrometheusPluginsList(config *viper.Viper) []*Plugin {
 	return plugins
 }
 
-func NewPrometheusCollectorTask(podName string, podInfo ServicePodInfo, config *viper.Viper) *Task {
+func NewPrometheusCollectorTask(podInfo ServicePodInfo, config *viper.Viper) *Task {
 	runOpts := &RunOpts{
 		ScheduleType:      "simple",
 		ScheduleInterval:  "5s",
@@ -68,19 +68,26 @@ func NewPrometheusCollectorTask(podName string, podInfo ServicePodInfo, config *
 
 	return &Task{
 		// e.g. PROMETHEUS-resource-worker-spark-9br5d
-		Name:        prometheusTaskNamePrefix + "-" + podName,
-		WorkflowMap: NewPrometheusCollectorWorkflowMap(podInfo.buildPrometheusMetricURL(), config),
+		Name:        prometheusTaskNamePrefix + "-" + podInfo.PodName,
+		WorkflowMap: NewPrometheusCollectorWorkflowMap(podInfo, config),
 		Opts:        runOpts,
 	}
 }
 
-func NewPrometheusCollectorWorkflowMap(prometheusMetricURL string, conf *viper.Viper) *wmap.WorkflowMap {
+func NewPrometheusCollectorWorkflowMap(podInfo ServicePodInfo, conf *viper.Viper) *wmap.WorkflowMap {
 	ns := "/hyperpilot/prometheus"
 	metrics := make(map[string]int)
 	metrics["/hyperpilot/prometheus/"] = 1
 	config := make(map[string]interface{})
-	config["endpoint"] = prometheusMetricURL
+	config["endpoint"] = podInfo.buildPrometheusMetricURL()
 	collector := NewCollector(ns, metrics, config)
+
+	tagEntry := make(map[string]string)
+	tagEntry["app_id"] = podInfo.AppID
+	tagEntry["pod_name"] = podInfo.PodName
+	tags := make(map[string]map[string]string)
+	tags[ns] = tagEntry
+	collector.collector.Tags = tags
 
 	// create influx publisher
 	publisherConfig := make(map[string]interface{})
