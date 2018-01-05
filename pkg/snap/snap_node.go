@@ -1,15 +1,15 @@
 package snap
 
 import (
+	"errors"
 	"log"
 	"strconv"
+	"strings"
 	"sync"
 
-	"errors"
 	"github.com/hyperpilotio/hyperpilot-operator/pkg/common"
 	"github.com/spf13/viper"
 	"k8s.io/client-go/pkg/api/v1"
-	"strings"
 )
 
 type ServicePodInfo struct {
