@@ -5,9 +5,11 @@ import (
 	"strconv"
 	"sync"
 
+	"errors"
 	"github.com/hyperpilotio/hyperpilot-operator/pkg/common"
 	"github.com/spf13/viper"
 	"k8s.io/client-go/pkg/api/v1"
+	"strings"
 )
 
 type ServicePodInfo struct {
@@ -81,7 +83,7 @@ func (runningService *RunningServiceList) deletePodInfoIfNotPresentInList(podLis
 		_, ok := runningService.RunningServicePods[p.Name]
 		if !ok {
 			delete(runningService.RunningServicePods, p.Name)
-			log.Printf("[ RunningServiceList ] Delete Running Service Pod {%s} in Node {%s} ", p.Name, runningService.SnapNode.NodeId)
+			log.Printf("[ RunningServiceList ] Delete Running Service Pod {%s}", p.Name)
 		}
 	}
 }
@@ -110,11 +112,11 @@ func (snapTask *SnapTaskList) createTask(servicePodName string, podInfo ServiceP
 		task := NewPrometheusCollectorTask(servicePodName, podInfo, n.config)
 		_, err := n.TaskManager.CreateTask(task, n.config)
 		if err != nil {
-			log.Printf("[ SnapTaskList ] Create task in Node {%s} fail: %s", n.NodeId, err.Error())
+			log.Printf("[ SnapTaskList ] Snap create task fail: %s", err.Error())
 			return err
 		}
 		snapTask.SnapTasks[servicePodName] = task.Name
-		log.Printf("[ SnapTaskList ] Create task {%s} in Node {%s}", task.Name, n.NodeId)
+		log.Printf("[ SnapTaskList ] Snap Create task {%s}", task.Name)
 	}
 
 	return nil
@@ -136,23 +138,22 @@ func (snapTask *SnapTaskList) reconcile() error {
 		if !ok {
 			taskId, err := getTaskIDFromTaskName(n.TaskManager, taskName)
 			if err != nil {
-				log.Printf("[ SnapTaskList ] Get id of task {%s} in Node {%s} fail when deleting: %s", taskName, n.NodeId, err.Error())
+				log.Printf("[ SnapTaskList ] Get id of task {%s} fail when deleting: %s", taskName, err.Error())
 				return err
 			}
 			err = n.TaskManager.StopAndRemoveTask(taskId)
 			if err != nil {
-				log.Printf("[ SnapTaskList ] Delete task {%s} in Node {%s} fail: %s", taskName, n.NodeId, err.Error())
+				log.Printf("[ SnapTaskList ] Delete task {%s} fail: %s", taskName, err.Error())
 				return err
 			}
 			delete(snapTask.SnapTasks, servicePodName)
-			log.Printf("[ SnapTaskList ] Delete task {%s} in Node {%s}", taskName, n.NodeId)
+			log.Printf("[ SnapTaskList ] Delete task {%s}", taskName)
 		}
 	}
 	return nil
 }
 
 type SnapNode struct {
-	NodeId             string
 	Host               string
 	TaskManager        *TaskManager
 	SnapTasks          *SnapTaskList
@@ -163,9 +164,8 @@ type SnapNode struct {
 	config             *viper.Viper
 }
 
-func NewSnapNode(nodeName string, host string, serviceList *ServiceWatchingList, config *viper.Viper) *SnapNode {
+func NewSnapNode(host string, serviceList *ServiceWatchingList, config *viper.Viper) *SnapNode {
 	snapNode := &SnapNode{
-		NodeId:      nodeName,
 		Host:        host,
 		TaskManager: nil,
 		PodEvents:   make(chan *common.PodEvent, 1000),
@@ -178,22 +178,6 @@ func NewSnapNode(nodeName string, host string, serviceList *ServiceWatchingList,
 	snapNode.RunningServicePods = runningServices
 	snapNode.SnapTasks = snapTasks
 	return snapNode
-}
-
-func (n *SnapNode) init(isOutsideCluster bool, clusterState *common.ClusterState) (bool, error) {
-	clusterState.Lock.RLock()
-	defer clusterState.Lock.RUnlock()
-
-	for _, p := range clusterState.Pods {
-		if n.NodeId == p.Spec.NodeName && isSnapPod(p) {
-			if err := n.initSnap(isOutsideCluster, p, clusterState); err != nil {
-				return true, err
-			}
-			return true, nil
-		}
-	}
-	log.Printf("Snap is not found in cluster for node %s during init", n.NodeId)
-	return false, nil
 }
 
 func (n *SnapNode) initSingleSnap(clusterState *common.ClusterState) error {
@@ -211,10 +195,10 @@ func (n *SnapNode) initSingleSnap(clusterState *common.ClusterState) error {
 	//todo: how to initSnap if timeout
 	err = n.TaskManager.WaitForLoadPlugins(n.config.GetInt("SnapTaskController.PluginDownloadTimeoutMin"))
 	if err != nil {
-		log.Printf("Failed to create Snap Task Manager in Node {%s}: {%s}", n.NodeId, err.Error())
+		log.Printf("Failed to create Snap Task Manager: {%s}", err.Error())
 		return err
 	}
-	log.Printf("[ SnapNode ] {%s} Load plugins completed", n.NodeId)
+	log.Printf("[ SnapNode ] Load plugins completed")
 
 	tasks := n.TaskManager.GetTasks()
 	for _, task := range tasks.ScheduledTasks {
@@ -227,59 +211,6 @@ func (n *SnapNode) initSingleSnap(clusterState *common.ClusterState) error {
 	clusterState.Lock.RLock()
 	for _, p := range clusterState.Pods {
 		if n.ServiceList.isServicePod(p) {
-			// TODO: How do we know which container has the right port? and which port?
-			container := p.Spec.Containers[0]
-			if len(container.Ports) > 0 {
-				n.RunningServicePods.addPodInfo(p.Name, ServicePodInfo{
-					Namespace: p.Namespace,
-					Port:      container.Ports[0].HostPort,
-					PodIP:     p.Status.PodIP,
-				})
-			}
-		}
-	}
-	clusterState.Lock.RUnlock()
-
-	n.reconcileSnapState()
-	n.Run()
-	return nil
-}
-
-func (n *SnapNode) initSnap(isOutsideCluster bool, snapPod *v1.Pod, clusterState *common.ClusterState) error {
-	var taskManager *TaskManager
-	var err error
-	if isOutsideCluster {
-		taskManager, err = NewTaskManager(n.Host, n.config)
-	} else {
-		taskManager, err = NewTaskManager(snapPod.Status.PodIP, n.config)
-	}
-
-	if err != nil {
-		log.Printf("Failed to create Snap Task Manager: " + err.Error())
-		return err
-	}
-
-	n.TaskManager = taskManager
-
-	//todo: how to initSnap if timeout
-	err = n.TaskManager.WaitForLoadPlugins(n.config.GetInt("SnapTaskController.PluginDownloadTimeoutMin"))
-	if err != nil {
-		log.Printf("Failed to create Snap Task Manager in Node {%s}: {%s}", n.NodeId, err.Error())
-		return err
-	}
-	log.Printf("[ SnapNode ] {%s} Loads Plugin  Complete", n.NodeId)
-
-	tasks := n.TaskManager.GetTasks()
-	for _, task := range tasks.ScheduledTasks {
-		if isSnapControllerTask(task.Name) {
-			servicePodName := getServicePodNameFromSnapTask(task.Name)
-			n.SnapTasks.addTaskName(servicePodName, task.Name)
-		}
-	}
-
-	clusterState.Lock.RLock()
-	for _, p := range clusterState.Pods {
-		if p.Spec.NodeName == n.NodeId && n.ServiceList.isServicePod(p) {
 			// TODO: How do we know which container has the right port? and which port?
 			container := p.Spec.Containers[0]
 			if len(container.Ports) > 0 {
@@ -317,7 +248,7 @@ func (n *SnapNode) Run() {
 		for {
 			select {
 			case <-n.ExitChan:
-				log.Printf("[ SnapNode ] {%s} signaled to exit", n.NodeId)
+				log.Printf("[ SnapNode ] Snap is signaled to exit")
 				return
 			case e := <-n.PodEvents:
 				switch e.EventType {
@@ -348,4 +279,25 @@ func (n *SnapNode) Run() {
 
 func (n *SnapNode) Exit() {
 	n.ExitChan <- true
+}
+
+func isSnapControllerTask(taskName string) bool {
+	if strings.HasPrefix(taskName, prometheusTaskNamePrefix) {
+		return true
+	}
+	return false
+}
+
+func getServicePodNameFromSnapTask(taskName string) string {
+	return strings.SplitN(taskName, "-", 2)[1]
+}
+
+func getTaskIDFromTaskName(manager *TaskManager, name string) (string, error) {
+	tasks := manager.GetTasks().ScheduledTasks
+	for _, t := range tasks {
+		if t.Name == name {
+			return t.ID, nil
+		}
+	}
+	return "", errors.New("Can not find ID from Name")
 }

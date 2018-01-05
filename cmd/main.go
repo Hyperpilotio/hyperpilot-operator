@@ -126,11 +126,6 @@ func loadControllers(config *viper.Viper) []operator.EventProcessor {
 		controllerSet = common.StringSetFromList(config.GetStringSlice("Operator.LoadedControllers"))
 	}
 
-	if controllerSet.IsExist("SnapTaskController") {
-		controllers = append(controllers, hsnap.NewSnapTaskController(config))
-		log.Printf("[ main ] %s is configured to load", "SnapTaskController")
-	}
-
 	if controllerSet.IsExist("SingleSnapController") {
 		controllers = append(controllers, hsnap.NewSingleSnapController(config))
 		log.Printf("[ main ] %s is configured to load", "SingleSnapController")
