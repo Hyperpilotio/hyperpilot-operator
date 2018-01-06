@@ -441,7 +441,13 @@ func (server *APIServer) getClusterAppMetrics(c *gin.Context) {
 		podList = server.ClusterState.FindDeploymentPod(req.Namespace, req.Name, hash)
 	case "statefulset":
 		podList = server.ClusterState.FindStatefulSetPod(req.Namespace, req.Name)
-
+	default:
+		log.Printf("[ APIServer ] Kind type {%s} is not supported", req.K8sType)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": true,
+			"cause": "Kind type {" + req.K8sType + "} is not supported ",
+		})
+		return
 	}
 
 	if len(podList) == 0 {
