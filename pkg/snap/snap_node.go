@@ -16,6 +16,8 @@ type ServicePodInfo struct {
 	Namespace string
 	Port      int32
 	PodIP     string
+	PodName   string
+	Appid     string
 }
 
 func (s *ServicePodInfo) buildPrometheusMetricURL() string {
@@ -41,7 +43,7 @@ func (runningService *RunningServiceList) reconcile() error {
 	defer runningService.Lock.Unlock()
 
 	for servicePodName, podInfo := range runningService.RunningServicePods {
-		if err := runningService.SnapNode.SnapTasks.createTask(servicePodName, podInfo); err != nil {
+		if err := runningService.SnapNode.SnapTasks.createTask(podInfo); err != nil {
 			log.Printf("[ RunningServiceList ] Create task fail when snap task for {%s} is not exist: %s", servicePodName, err.Error())
 			return err
 		}
@@ -102,20 +104,20 @@ func NewSnapTaskList(node *SnapNode) *SnapTaskList {
 	}
 }
 
-func (snapTask *SnapTaskList) createTask(servicePodName string, podInfo ServicePodInfo) error {
+func (snapTask *SnapTaskList) createTask(podInfo ServicePodInfo) error {
 	snapTask.Lock.Lock()
 	defer snapTask.Lock.Unlock()
 
 	n := snapTask.SnapNode
-	_, ok := snapTask.SnapTasks[servicePodName]
+	_, ok := snapTask.SnapTasks[podInfo.PodName]
 	if !ok {
-		task := NewPrometheusCollectorTask(servicePodName, podInfo, n.config)
+		task := NewPrometheusCollectorTask(podInfo, n.config)
 		_, err := n.TaskManager.CreateTask(task, n.config)
 		if err != nil {
 			log.Printf("[ SnapTaskList ] Snap create task fail: %s", err.Error())
 			return err
 		}
-		snapTask.SnapTasks[servicePodName] = task.Name
+		snapTask.SnapTasks[podInfo.PodName] = task.Name
 		log.Printf("[ SnapTaskList ] Snap Create task {%s}", task.Name)
 	}
 
@@ -213,11 +215,17 @@ func (n *SnapNode) initSingleSnap(clusterState *common.ClusterState) error {
 		if n.ServiceList.isServicePod(p) {
 			// TODO: How do we know which container has the right port? and which port?
 			container := p.Spec.Containers[0]
+			appID := n.ServiceList.findAppIDOfMicroservice(p.Name)
+			if appID == "" {
+				log.Printf("[ SnapNode ] Can't find app id of Pod {%s} in namespace {%s} when check all pos in ClusterState on InitSnap", p.Name, p.Namespace)
+			}
 			if len(container.Ports) > 0 {
 				n.RunningServicePods.addPodInfo(p.Name, ServicePodInfo{
 					Namespace: p.Namespace,
 					Port:      container.Ports[0].HostPort,
 					PodIP:     p.Status.PodIP,
+					PodName:   p.Name,
+					Appid:     appID,
 				})
 			}
 		}
@@ -253,15 +261,21 @@ func (n *SnapNode) Run() {
 			case e := <-n.PodEvents:
 				switch e.EventType {
 				case common.ADD, common.UPDATE:
+					appId := n.ServiceList.findAppIDOfMicroservice(e.Cur.Name)
+					if appId == "" {
+						log.Printf("[ SnapNode ] Can't find app id of Pod {%s} in namespace {%s} when handle events", e.Cur.Name, e.Cur.Namespace)
+					}
 					container := e.Cur.Spec.Containers[0]
 					n.RunningServicePods.addPodInfo(e.Cur.Name, ServicePodInfo{
 						Namespace: e.Cur.Namespace,
 						Port:      container.Ports[0].HostPort,
 						PodIP:     e.Cur.Status.PodIP,
+						PodName:   e.Cur.Name,
+						Appid:     appId,
 					})
 					if err := n.reconcileSnapState(); err != nil {
 						log.Printf("[ SnapNode ] Unable to reconcile snap state: %s", err.Error())
-						return
+						continue
 					}
 					log.Printf("[ SnapNode ] Insert Service Pod {%s}", e.Cur.Name)
 
@@ -269,7 +283,7 @@ func (n *SnapNode) Run() {
 					n.RunningServicePods.delPodInfo(e.Cur.Name)
 					if err := n.reconcileSnapState(); err != nil {
 						log.Printf("[ SnapNode ] Unable to reconcile snap state: %s", err.Error())
-						return
+						continue
 					}
 				}
 			}

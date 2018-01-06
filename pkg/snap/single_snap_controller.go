@@ -60,6 +60,20 @@ func (watchinglist *ServiceWatchingList) isServicePod(pod *v1.Pod) bool {
 	return false
 }
 
+func (watchinglist *ServiceWatchingList) findAppIDOfMicroservice(serviceName string) string {
+	watchinglist.Lock.Lock()
+	defer watchinglist.Lock.Unlock()
+
+	for appID, serviceList := range watchinglist.watchingList {
+		for _, service := range serviceList {
+			if strings.HasPrefix(serviceName, service) {
+				return appID
+			}
+		}
+	}
+	return ""
+}
+
 func (watchinglist *ServiceWatchingList) add(appID, serviceName string) {
 	watchinglist.Lock.Lock()
 	defer watchinglist.Lock.Unlock()
@@ -272,6 +286,8 @@ func (s *SingleSnapController) AppsUpdated(responses []AppResponse) {
 						Namespace: p.Namespace,
 						Port:      container.Ports[0].HostPort,
 						PodIP:     p.Status.PodIP,
+						PodName:   p.Name,
+						Appid:     app.AppId,
 					})
 				}
 			}
