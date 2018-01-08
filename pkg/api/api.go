@@ -535,19 +535,16 @@ func getPrometheusMetrics(url string) (MetricResponse, error) {
 
 // note: tag key name CAN NOT be summary, conflict with summary
 func getTagFromLabel(tags []Tag, label *dto.LabelPair) []Tag {
-
 	for _, tag := range tags {
 		if tag.Key == *label.Name {
 			*tag.Values = append(*tag.Values, *label.Value)
 			return tags
 		}
 	}
-
 	tags = append(tags, Tag{
 		Key:    *label.Name,
 		Values: &[]string{*label.Value},
 	})
-
 	return tags
 }
 
