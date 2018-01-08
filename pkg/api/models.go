@@ -56,6 +56,16 @@ type MetricRequest struct {
 	Prometheus Prometheus `json:"prometheus"`
 }
 
+type Tag struct {
+	Key    string    `json:"key"`
+	Values *[]string `json:"values"`
+}
+
+type Metric struct {
+	Name string `json:"name"`
+	Tags *[]Tag `json:"tags"`
+}
+
 type MetricResponse struct {
-	Metric *[]string `json:"metrics"`
+	Metrics *[]Metric `json:"metrics"`
 }
