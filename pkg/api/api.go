@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hyperpilotio/hyperpilot-operator/pkg/common"
+	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
 	"github.com/spf13/viper"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -487,7 +488,6 @@ func (server *APIServer) isOutsideCluster() bool {
 
 func getPrometheusMetrics(url string) (MetricResponse, error) {
 	var parser expfmt.TextParser
-	var metricNames []string
 	var ioReader io.Reader
 
 	resp, err := http.Get(url)
@@ -509,8 +509,53 @@ func getPrometheusMetrics(url string) (MetricResponse, error) {
 		log.Printf("Parse metrics from IO reader failed: %s", err.Error())
 		return MetricResponse{}, err
 	}
-	for name := range metricFamilies {
-		metricNames = append(metricNames, name)
+	metrics := []Metric{}
+	for _, family := range metricFamilies {
+		metric := Metric{
+			Name: *family.Name,
+		}
+		tags := []Tag{}
+		for _, mm := range family.GetMetric() {
+			for _, label := range mm.GetLabel() {
+				tags = getTagFromLabel(tags, label)
+			}
+			switch family.GetType() {
+			case dto.MetricType_SUMMARY:
+				tag := getTagFromSummary(mm)
+				tags = append(tags, tag)
+			}
+		}
+		metric.Tags = &tags
+		metrics = append(metrics, metric)
 	}
-	return MetricResponse{&metricNames}, nil
+	return MetricResponse{
+		Metrics: &metrics,
+	}, nil
+}
+
+// note: tag key name CAN NOT be summary, conflict with summary
+func getTagFromLabel(tags []Tag, label *dto.LabelPair) []Tag {
+	for _, tag := range tags {
+		if tag.Key == *label.Name {
+			*tag.Values = append(*tag.Values, *label.Value)
+			return tags
+		}
+	}
+	tags = append(tags, Tag{
+		Key:    *label.Name,
+		Values: &[]string{*label.Value},
+	})
+	return tags
+}
+
+func getTagFromSummary(metric *dto.Metric) Tag {
+	summaryValue := []string{"sum", "count"}
+	for _, quantile := range metric.GetSummary().GetQuantile() {
+		key := fmt.Sprintf("quantile_%d", int(quantile.GetQuantile()*100))
+		summaryValue = append(summaryValue, key)
+	}
+	return Tag{
+		Key:    "summary",
+		Values: &summaryValue,
+	}
 }
