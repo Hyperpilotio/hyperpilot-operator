@@ -52,7 +52,12 @@ func (server *APIServer) Run() error {
 		clusterGroup.GET("/mapping", server.getClusterMapping)
 		clusterGroup.GET("/appmetrics", server.getClusterAppMetrics)
 	}
-	router.Group("/actuation")
+
+	// service for hosted-service
+	hostedServiceGroup := router.Group("/hosted")
+	{
+		hostedServiceGroup.POST("/register", server.register)
+	}
 
 	log.Printf("[ APIServer ] API Server starts")
 	err := router.Run(":" + server.config.GetString("APIServer.Port"))
@@ -558,4 +563,12 @@ func getTagFromSummary(metric *dto.Metric) Tag {
 		Key:    "summary",
 		Values: &summaryValue,
 	}
+}
+
+func (server *APIServer) register(c *gin.Context) {
+
+}
+
+func writeToMongo() {
+
 }

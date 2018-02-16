@@ -1,10 +1,7 @@
 {
   "Operator": {
-    "OutsideCluster": false,
-    "LoadedControllers": [
-      "NodeSpecController",
-      "SingleSnapController"
-    ]
+    "OutsideCluster": true,
+    "LoadedControllers": []
   },
   "APIServer": {
     "Port": "8080",

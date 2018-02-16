@@ -17,6 +17,7 @@ import (
 	appv1beta1 "k8s.io/client-go/pkg/apis/apps/v1beta1"
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
 	extv1beta1 "k8s.io/client-go/pkg/apis/extensions/v1beta1"
+	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/tools/clientcmd"
 )
 

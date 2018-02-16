@@ -1,9 +1,9 @@
 OPERATOR_NAME  := hyperpilot-operator
 IMAGE := hyperpilot/$(OPERATOR_NAME)
-VERSION := latest
+VERSION := hosted-service
 
 TEST_IMAGE := ogre0403/$(OPERATOR_NAME)
-TEST_VERSION := $(shell date +%Y%m%d%H%M)
+TEST_VERSION := hosted-service
 
 .PHONY: install_deps build build-ubuntu-image
 
